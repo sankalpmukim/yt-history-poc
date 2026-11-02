@@ -9,11 +9,12 @@
 import type { HistorySection, StoreShape } from "../utils/history-types"
 import type { MetaState, SyncDiagnostics } from "./types"
 import { KEYS, monthOf, dateKeyOf, eventsKey } from "./types"
-import { readMeta, readVideos, readEventShards, writeEventShard, readDurationQueue } from "./storage"
+import { readMeta, readVideos, readEventShards, writeEventShard, readDurationQueue, readRules, readCategories } from "./storage"
 import type { KV } from "./storage"
 import { mergeFetchResult } from "./merge"
 import { migrateV1Store } from "./migrate"
 import { DEFAULT_CATEGORIES, fallbackStarterRules, defaultMeta } from "./defaults"
+import { compileRules, matchFirstRule, targetOfVideo } from "./rules"
 import { dayLabelToDate } from "../utils/day"
 
 const LEGACY_V1_KEY = "ytHistoryPoc.v1"
@@ -110,8 +111,11 @@ export async function applySyncResult(
   ].slice(0, MAX_DURATION_QUEUE)
   await kv.set({ [KEYS.durationQueue]: nextQueue })
 
+  // auto-categorization: run rules over the (possibly changed) video set
+  const rulesResult = await runRulesPass(kv, params.now)
+
   const d = merged.diagnostics
-  const status = `ok · ${d.items} item(s) in ${d.sections} day(s) · ${d.newEvents} new / ${d.updatedEvents} updated events · ${d.newVideos} new / ${d.updatedVideos} updated videos · ${Object.keys(merged.videos).length} videos total`
+  const status = `ok · ${d.items} item(s) in ${d.sections} day(s) · ${d.newEvents} new / ${d.updatedEvents} updated events · ${d.newVideos} new / ${d.updatedVideos} updated videos · ${Object.keys(merged.videos).length} videos total · ${rulesResult.assignedCount} auto-categorized`
   const nextMeta: MetaState = {
     ...meta,
     lastSyncedAt: nowIso,
@@ -140,4 +144,84 @@ export async function noteStatus(kv: KV, status: string): Promise<void> {
   const meta = await readMeta(kv)
   if (!meta) return
   await kv.set({ [KEYS.meta]: { ...meta, lastSyncStatus: status } })
+}
+
+/* ------------------------------------------------------------------ */
+/* rules pass (M3)                                                     */
+/* ------------------------------------------------------------------ */
+
+export interface RulesPassResult {
+  /** videos currently assigned to a category by rules (after this pass) */
+  assignedCount: number
+  /** videos whose assignment changed in this pass (incl. newly assigned) */
+  changedCount: number
+  /** total videos examined */
+  examinedCount: number
+}
+
+/**
+ * Recompute rule-based categories for every video without a manual override.
+ *
+ * Runs on every merge and after every duration-resolver run — durations and
+ * isShort facts arrive asynchronously, so assignment is retried implicitly
+ * until evidence exists. Rule bookkeeping: hitCount = number of videos the
+ * rule currently assigns (not a cumulative counter); lastHitAt = time of the
+ * most recent pass in which it assigned at least one video.
+ */
+export async function runRulesPass(kv: KV, now: Date): Promise<RulesPassResult> {
+  const rules = await readRules(kv)
+  const categories = await readCategories(kv)
+  const storedVideos = await readVideos(kv)
+
+  const validCategoryIds = new Set(
+    categories.filter((c) => !c.archivedAt).map((c) => c.id)
+  )
+  const compiled = compileRules(rules, validCategoryIds)
+
+  const nowIso = now.toISOString()
+  const videos: Record<string, typeof storedVideos[string]> = { ...storedVideos }
+  const counts = new Map<string, number>()
+  let changedCount = 0
+  let assignedCount = 0
+
+  for (const [id, video] of Object.entries(storedVideos)) {
+    // manual override always wins — never touched by rules
+    const match =
+      video.categoryOverride != null || compiled.length === 0
+        ? null
+        : matchFirstRule(compiled, targetOfVideo(video))
+    const nextAuto = match != null ? match.rule.categoryId : null
+    const nextRuleId = match != null ? match.rule.id : null
+
+    if (video.autoCategoryId !== nextAuto || video.appliedRuleId !== nextRuleId) {
+      videos[id] = { ...video, autoCategoryId: nextAuto, appliedRuleId: nextRuleId }
+      changedCount++
+    }
+    if (nextRuleId != null) {
+      assignedCount++
+      counts.set(nextRuleId, (counts.get(nextRuleId) ?? 0) + 1)
+    }
+  }
+
+  let rulesChanged = false
+  const nextRules = rules.map((rule) => {
+    const count = counts.get(rule.id) ?? 0
+    const lastHitAt = count > 0 ? nowIso : rule.lastHitAt
+    if (rule.hitCount !== count || (count > 0 && rule.lastHitAt !== lastHitAt)) {
+      rulesChanged = true
+      return { ...rule, hitCount: count, lastHitAt }
+    }
+    return rule
+  })
+
+  const writes: Record<string, unknown> = {}
+  if (changedCount > 0) writes[KEYS.videos] = videos
+  if (rulesChanged) writes[KEYS.rules] = nextRules
+  if (Object.keys(writes).length > 0) await kv.set(writes)
+
+  return {
+    assignedCount,
+    changedCount,
+    examinedCount: Object.keys(storedVideos).length
+  }
 }

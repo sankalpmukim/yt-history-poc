@@ -5,6 +5,18 @@ YouTube watch history (watch events = transactions, categories = spending
 categories, value scores = the inverse of cost, budgets = time budgets).
 See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
 
+**Status: M3 complete** — everything in M2 plus the **rules engine**: videos
+are auto-categorized on every sync (and re-tried whenever the duration
+resolver discovers new duration/isShort evidence) using priority-ordered,
+first-match-wins rules over channel (equals/contains), title (substrings or
+regex), Shorts-ness, and duration bounds. Matching is case-insensitive and
+fails closed — "unknown" data never matches, so categories are only assigned
+on real evidence. Manual overrides always win; disabled rules and rules
+targeting archived/deleted categories are skipped; invalid regexes disable a
+rule rather than break the pass. `hitCount` on each rule reflects how many
+videos it currently assigns. Ships with the two starter keyword rules
+enabled + a disabled Shorts rule (all editable).
+
 **Status: M2 complete** — everything in M1 plus:
 - **Sync coordinator**: a visit to any YouTube page that can't read history
   itself (Brave strips auth from extension-initiated innertube calls) asks
@@ -134,8 +146,16 @@ pnpm build          # → build/chrome-mv3-prod
 ## Verification shortcuts
 
 - Unit tests for the core logic: `pnpm test` (merge/migrate/estimate/
-  retention/duration/resolve/ledger — 43 tests, node + esbuild, no browser
-  needed).
+  retention/duration/resolve/rules/ledger — 62 tests, node + esbuild, no
+  browser needed).
+- After any sync, inspect auto-categorization in the SW console:
+  `chrome.storage.local.get("yl.v2.videos", d => Object.values(d["yl.v2.videos"]).filter(v => v.appliedRuleId))`
+  — tutorial/lecture-ish titles should show `appliedRuleId:
+  "starter-tutorial"/"starter-lecture"`. Rule stats:
+  `chrome.storage.local.get("yl.v2.rules", console.dir)` (hitCount = videos
+  currently assigned by each rule).
+- Manual override check: set a video's `categoryOverride` in the console,
+  re-sync (`window.__YT_LEDGER_SYNC()`), and confirm rules leave it alone.
 - Console (page context): filter `yt-ledger` — shows sync flow, sections,
   stored-event summary from the service worker.
 - Visit `youtube.com` (any page, NOT the history feed): within a few seconds

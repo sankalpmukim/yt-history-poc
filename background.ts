@@ -19,7 +19,7 @@
 import mainWorldUrl from "url:./contents/history-main"
 import { chromeKV, readVideos, readDurationQueue } from "./core/storage"
 import type { KV } from "./core/storage"
-import { ensureInitialized, applySyncResult, noteStatus } from "./core/ledger"
+import { ensureInitialized, applySyncResult, noteStatus, runRulesPass } from "./core/ledger"
 import { pruneNow } from "./core/retention"
 import { resolveDurations } from "./core/resolve"
 import { KEYS } from "./core/types"
@@ -196,6 +196,9 @@ async function runDurationResolver(): Promise<void> {
     }
     if (out.resolvedCount > 0) writes[KEYS.videos] = out.videos
     await kv.set(writes)
+    // durations/isShort facts arrived → retry rule assignment for videos
+    // that were previously unmatchable for lack of evidence
+    if (out.resolvedCount > 0) await runRulesPass(kv, new Date())
     ping(
       "duration-resolver",
       `resolved=${out.resolvedCount} failed=${out.failedCount} remaining=${out.remainingQueue.length}`

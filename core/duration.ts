@@ -51,3 +51,18 @@ export function extractIsShort(html: string): boolean | null {
   if (/"webPageType":"WEB_PAGE_TYPE_WATCH"/.test(html)) return false
   return null
 }
+
+/**
+ * Best-effort Shorts guess from duration alone (used when only the history
+ * overlay duration is known). Shorts can now run to ~3 minutes, so only the
+ * extremes are conclusive:
+ *   ≤60s   → true  (practically all ≤60s videos are Shorts)
+ *   61–180s → null (ambiguous; wait for the resolver's page-type answer)
+ *   >180s  → false (too long to be a Short)
+ */
+export function guessIsShortFromDuration(durationSec: number | null): boolean | null {
+  if (durationSec == null) return null
+  if (durationSec <= 60) return true
+  if (durationSec <= 180) return null
+  return false
+}

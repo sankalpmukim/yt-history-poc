@@ -16,7 +16,7 @@
 import type { HistorySection } from "../utils/history-types"
 import type { VideoRecord, WatchEvent } from "./types"
 import { eventKeyOf, monthOf, dateKeyOf } from "./types"
-import { parseProgressPct } from "./duration"
+import { parseProgressPct, guessIsShortFromDuration } from "./duration"
 import { dayLabelToDate } from "../utils/day"
 
 export interface MergeDiagnostics {
@@ -121,6 +121,9 @@ export function mergeFetchResult(params: {
             item.durationSec != null
               ? item.durationSource ?? "overlay"
               : prev.durationSource,
+          // never downgrade a definitive isShort (resolver page-type) with
+          // the duration heuristic — only fill nulls
+          isShort: prev.isShort ?? guessIsShortFromDuration(item.durationSec ?? null),
           lastSeenAt: nowIso
         }
         diagnostics.updatedVideos++
@@ -132,7 +135,7 @@ export function mergeFetchResult(params: {
           url: item.url,
           durationSec: item.durationSec ?? null,
           durationSource: item.durationSec != null ? item.durationSource ?? "overlay" : null,
-          isShort: null,
+          isShort: guessIsShortFromDuration(item.durationSec ?? null),
           categoryOverride: null,
           autoCategoryId: null,
           appliedRuleId: null,

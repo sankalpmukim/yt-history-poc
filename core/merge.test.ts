@@ -2,6 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { mergeFetchResult } from "./merge"
 import type { HistoryItem, HistorySection } from "../utils/history-types"
+import type { VideoRecord } from "./types"
 import { eventKeyOf } from "./types"
 
 // Mon Nov 02 2026, noon local — deterministic reference for day labels
@@ -192,3 +193,60 @@ test("items without a videoId are skipped", () => {
   assert.equal(out.diagnostics.skippedItems, 1)
   assert.equal(Object.keys(out.videos).length, 1)
 })
+
+test("isShort guessed from duration at the extremes, null in the ambiguous zone", () => {
+  const out = mergeFetchResult({
+    videos: {},
+    eventShards: {},
+    sections: [
+      section(
+        "Today",
+        item("short", { durationSec: 45 }),
+        item("mid", { durationSec: 120 }),
+        item("long", { durationSec: 600 }),
+        item("unknown")
+      )
+    ],
+    now: NOW
+  })
+  assert.equal(out.videos.short.isShort, true)
+  assert.equal(out.videos.mid.isShort, null)
+  assert.equal(out.videos.long.isShort, false)
+  assert.equal(out.videos.unknown.isShort, null)
+})
+
+test("a definitive isShort is never downgraded by the duration guess", () => {
+  // resolver previously determined this is a WATCH page video (isShort=false)
+  const first = mergeFetchResult({
+    videos: { v: { ...makeVideo("v"), isShort: false, durationSec: 58 } },
+    eventShards: {},
+    sections: [],
+    now: NOW
+  })
+  // a later sync offers an overlay duration of 58s — guess would say true
+  const second = mergeFetchResult({
+    videos: first.videos,
+    eventShards: {},
+    sections: [section("Today", item("v", { durationSec: 58 }))],
+    now: NOW
+  })
+  assert.equal(second.videos.v.isShort, false, "definitive answer preserved")
+})
+
+/** minimal VideoRecord factory for the isShort-preservation test */
+function makeVideo(videoId: string): VideoRecord {
+  return {
+    videoId,
+    title: "Video " + videoId,
+    channel: "CHAN",
+    url: "https://www.youtube.com/watch?v=" + videoId,
+    durationSec: null,
+    durationSource: null,
+    isShort: null,
+    categoryOverride: null,
+    autoCategoryId: null,
+    appliedRuleId: null,
+    firstSeenAt: NOW.toISOString(),
+    lastSeenAt: NOW.toISOString()
+  }
+}

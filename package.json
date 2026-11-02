@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@types/chrome": "0.3.7",
+    "@types/node": "^22.10.0",
     "esbuild": "0.18.20",
     "typescript": "^5.5.0"
   },
