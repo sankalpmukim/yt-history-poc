@@ -140,7 +140,7 @@ export function CategoryModal({
               <button
                 className="opt"
                 onClick={() => setSelected(c.id)}
-                style={selected === c.id ? { background: "#262d3d" } : undefined}
+                aria-pressed={selected === c.id}
               >
                 <span>
                   {c.emoji} {c.name}
@@ -154,10 +154,8 @@ export function CategoryModal({
                   key={s.id}
                   className="opt"
                   onClick={() => setSelected(s.id)}
-                  style={{
-                    paddingLeft: 28,
-                    ...(selected === s.id ? { background: "#262d3d" } : {})
-                  }}
+                  aria-pressed={selected === s.id}
+                  style={{ paddingLeft: 28 }}
                 >
                   <span>
                     {s.emoji} {c.name} › {s.name}

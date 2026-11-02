@@ -10,12 +10,11 @@ import {
   CategoryModal,
   RangeBar,
   RANGE_OPTIONS,
-  StatCard,
   fmtDur,
   fmtPct,
   rangeFromDate
 } from "../lib/ui"
-import { StackedDailyBars, Donut } from "../lib/charts"
+import { StackedDailyBars } from "../lib/charts"
 
 export function OverviewView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const [range, setRange] = useState<string>("30d")
@@ -29,9 +28,19 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
         events: data.events,
         categories: data.categories,
         subcategories: data.subcategories,
-        drilldownParentId: drill,
         from: rangeFromDate(range)
       }),
+    [data, range]
+  )
+  const drillAgg = useMemo(
+    () => drill ? aggregateRange({
+      videos: data.videos,
+      events: data.events,
+      categories: data.categories,
+      subcategories: data.subcategories,
+      drilldownParentId: drill,
+      from: rangeFromDate(range)
+    }) : null,
     [data, range, drill]
   )
 
@@ -55,7 +64,7 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
     const sub = subById.get(id)
     if (sub) return sub.name
     const cat = catById.get(id)
-    if (cat) return drill === id ? `${cat.name} (no sub)` : cat.name
+    if (cat) return cat.name
     return id
   }
 
@@ -67,102 +76,114 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
   const daysCount = agg.byDay.length || 1
 
   return (
-    <div>
-      <div className="spread" style={{ marginBottom: 16 }}>
+    <div className="overview-view">
+      <div className="spread overview-heading">
         <h1>Overview</h1>
         <RangeBar value={range} onChange={setRange} options={RANGE_OPTIONS as unknown as Array<{ id: string; label: string }>} />
       </div>
 
-      <div className="statgrid">
-        <StatCard value={fmtDur(agg.totalSeconds)} label="watch time (est.)" />
-        <StatCard value={fmtDur(Math.round(agg.totalSeconds / daysCount))} label="avg / active day" />
-        <StatCard
-          value={agg.valueIndex == null ? "—" : agg.valueIndex.toFixed(1)}
-          label="time value index"
-          sub="0–5, categorized only"
-        />
-        <StatCard value={fmtPct(agg.lowValueShare)} label="low-value share" sub="score ≤ 1" />
-        <StatCard
-          value={`${agg.totalEvents}`}
-          label="watch events"
-          sub={`${agg.distinctVideos} videos`}
-        />
-        <StatCard
-          value={fmtDur(agg.uncategorizedSeconds)}
-          label="uncategorized time"
-          sub={`${agg.uncategorizedVideoCount} videos`}
-        />
-      </div>
-
-      <div className="card">
-        <div className="spread">
-          <h2>
-            {drill
-              ? `Daily watch time · ${catById.get(drill)?.name ?? drill}`
-              : "Daily watch time by category"}
-          </h2>
-          {drill ? (
-            <button className="btn btn-sm" onClick={() => setDrill(null)}>
-              ← All categories
-            </button>
-          ) : null}
+      <section className="reading-panel" aria-label="Estimated watch time summary">
+        <div className="reading-copy">
+          <div className="reading-number">{fmtDur(agg.totalSeconds)}</div>
+          <div className="reading-caption"><strong>estimated watch time</strong> in this range</div>
         </div>
-        <StackedDailyBars days={agg.byDay} colorOf={colorOf} labelOf={labelOf} />
-      </div>
-
-      <div className="card">
-        <div className="spread">
-          <h2>{drill ? `Breakdown · ${catById.get(drill)?.name ?? drill}` : "Where the time went"}</h2>
-          {drill ? (
-            <button className="btn btn-sm" onClick={() => setDrill(null)}>
-              ← All categories
-            </button>
-          ) : (
-            <span className="muted small">click a category to see subcategories</span>
-          )}
-        </div>
-        <div className="row" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
-          <Donut
-            slices={agg.byCategory.map((c) => ({ categoryId: c.categoryId, seconds: c.seconds }))}
-            colorOf={colorOf}
-            labelOf={labelOf}
-            total={agg.totalSeconds}
-            onSliceClick={(id) => {
-              if (!drill && id && catById.has(id)) setDrill(id)
-            }}
-          />
-          <div className="legend">
-            {agg.byCategory.map((c) => (
-              <div
-                key={c.categoryId ?? "none"}
-                className="legrow"
-                style={{ cursor: !drill && c.categoryId ? "pointer" : undefined }}
-                onClick={() => {
-                  if (!drill && c.categoryId && catById.has(c.categoryId)) setDrill(c.categoryId)
-                }}
-                title={!drill && c.categoryId ? "Click to see subcategories" : undefined}
-              >
-                <span className="swatch" style={{ background: colorOf(c.categoryId) }} />
-                <span style={{ width: 150 }}>{labelOf(c.categoryId)}</span>
-                <span style={{ width: 64, textAlign: "right" }}>{fmtDur(c.seconds)}</span>
-                <div className="sharebar">
-                  <div style={{ width: `${Math.round(c.share * 100)}%`, background: colorOf(c.categoryId) }} />
-                </div>
-                <span className="muted small" style={{ width: 44, textAlign: "right" }}>
-                  {fmtPct(c.share)}
-                </span>
-              </div>
-            ))}
+        <div className="reading-notes">
+          <div className="reading-note">
+            <strong>{fmtDur(Math.round(agg.totalSeconds / daysCount))}</strong>
+            <span>avg / active day</span>
+          </div>
+          <div className="reading-note">
+            <strong>{agg.valueIndex == null ? "—" : agg.valueIndex.toFixed(1)}</strong>
+            <span>time value index · 0–5</span>
+          </div>
+          <div className="reading-note">
+            <strong>{fmtPct(agg.lowValueShare)}</strong>
+            <span>low-value share · score ≤ 1</span>
+          </div>
+          <div className="reading-note">
+            <strong>{agg.totalEvents}</strong>
+            <span>watch events · {agg.distinctVideos} videos</span>
+          </div>
+          <div className="reading-note">
+            <strong>{fmtDur(agg.uncategorizedSeconds)}</strong>
+            <span>uncategorized · {agg.uncategorizedVideoCount} videos</span>
           </div>
         </div>
-        <div className="muted small" style={{ marginTop: 10 }}>
+      </section>
+
+      <section className="card trace-card">
+        <div className="spread">
+          <h2>Daily watch time by category</h2>
+          <span className="muted small">estimated time, by day</span>
+        </div>
+        <div className="trace-frame">
+          <StackedDailyBars days={agg.byDay} colorOf={colorOf} labelOf={labelOf} height={260} barW={18} gap={8} />
+        </div>
+      </section>
+
+      <section className="card ladder-card">
+        <div className="spread">
+          <div>
+            <h2>Where the time went</h2>
+            <div className="muted small">Each mark sits on your 0–5 value ladder. Select a category to open its subcategories.</div>
+          </div>
+          {drill ? (
+            <button className="btn btn-sm" onClick={() => setDrill(null)}>← All categories</button>
+          ) : null}
+        </div>
+        <div className="ladder-head" aria-hidden="true">
+          <span>Category</span>
+          <div className="ladder-scale">{[0, 1, 2, 3, 4, 5].map((v) => <span key={v}>{v}</span>)}</div>
+          <span style={{ textAlign: "right" }}>Value</span>
+          <span style={{ textAlign: "right" }}>Time</span>
+        </div>
+        {agg.byCategory.map((c) => {
+          const category = c.categoryId ? catById.get(c.categoryId) : undefined
+          const score = category?.valueScore
+          const expanded = drill === c.categoryId
+          const details = expanded ? drillAgg?.byCategory ?? [] : []
+          return (
+            <div className="ladder-row" key={c.categoryId ?? "none"}>
+              <button
+                className="value-trigger"
+                disabled={!category}
+                aria-label={`Drill into ${labelOf(c.categoryId)}`}
+                aria-expanded={expanded}
+                onClick={() => category && setDrill(expanded ? null : category.id)}
+              >
+                <span className="value-name">
+                  <span className="swatch" style={{ background: colorOf(c.categoryId) }} />
+                  <span className="value-name-text">{labelOf(c.categoryId)}</span>
+                </span>
+                <span className="ladder-rail" aria-hidden="true">
+                  {score != null ? <span className="ladder-progress" style={{ width: `${score * 20}%`, background: colorOf(c.categoryId) }} /> : null}
+                  {score != null ? <span className="ladder-marker" style={{ left: `${score * 20}%`, color: colorOf(c.categoryId), background: colorOf(c.categoryId) }} /> : null}
+                </span>
+                <span className="value-score">{score == null ? "—" : `${score}/5`}</span>
+                <span className="value-time">{fmtDur(c.seconds)} <span className="muted">{fmtPct(c.share)}</span></span>
+              </button>
+              {expanded ? (
+                <div className="value-details" aria-label={`${category?.name ?? "Category"} subcategories`}>
+                  {details.length ? details.map((sub) => (
+                    <div className="value-subrow" key={sub.categoryId ?? "none"}>
+                      <span>{labelOf(sub.categoryId)}</span>
+                      <span className="value-subbar"><span style={{ width: `${Math.round(sub.share * 100)}%`, background: colorOf(sub.categoryId) }} /></span>
+                      <span style={{ textAlign: "right" }}>{fmtDur(sub.seconds)}</span>
+                    </div>
+                  )) : <div className="muted small">No subcategory time in this range.</div>}
+                </div>
+              ) : null}
+            </div>
+          )
+        })}
+        <div className="muted small" style={{ marginTop: 16 }}>
           Top channels per category:{" "}
           {agg.byCategory
             .map((c) => `${labelOf(c.categoryId)} — ${(c.topChannels[0]?.channel ?? "—")} (${fmtDur(c.topChannels[0]?.seconds ?? null)})`)
             .slice(0, 4)
             .join(" · ") || "—"}
         </div>
-      </div>
+      </section>
 
       <div className="card">
         <h2>Review queue — uncategorized ({queue.length} shown)</h2>

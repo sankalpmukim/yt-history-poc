@@ -21,7 +21,7 @@ if (!new Set(["system", "light", "dark"]).has(theme)) throw new Error("Theme mus
 const root = process.cwd()
 const buildDir = resolve(root, "build/chrome-mv3-prod")
 const fixture = JSON.parse(readFileSync(resolve(root, "fixtures/qa-seed.json"), "utf8"))
-const outDir = resolve(root, "docs/screenshots", theme === "system" ? phase : `${phase}-${theme}`)
+const outDir = resolve(root, "docs/screenshots", theme === "light" ? `${phase}-light` : phase)
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 if (!existsSync(join(buildDir, "tabs/dashboard.html"))) throw new Error("Run pnpm build first")
 if (!existsSync(chrome)) throw new Error(`Chrome executable not found: ${chrome}`)
@@ -69,15 +69,21 @@ const server = createServer((req, res) => {
     }
     const script = `
       (() => {
-        ${theme === "light" ? `
-          const light = {
+        ${theme === "system" ? "" : `
+          document.documentElement.style.colorScheme = "${theme}";
+          const palette = ${JSON.stringify(theme === "light" ? {
             "--bg": "#eef3f1", "--panel": "#f8faf8", "--panel2": "#e4ece9", "--border": "#c8d5d1",
             "--text": "#18323a", "--muted": "#536d71", "--accent": "#147d80", "--danger": "#a33f35",
             "--ok": "#32715e", "--warn": "#986319", "--ink-soft": "#284a52", "--focus": "#147d80",
             "--rule": "rgba(40,74,82,.10)", "--shadow": "0 7px 20px rgba(24,50,58,.045)"
-          };
-          for (const [name, value] of Object.entries(light)) document.documentElement.style.setProperty(name, value);
-        ` : ""}
+          } : {
+            "--bg": "#14272b", "--panel": "#1b3237", "--panel2": "#244047", "--border": "#38555a",
+            "--text": "#e8f0ec", "--muted": "#a5bbb7", "--accent": "#69c2b8", "--danger": "#ff9384",
+            "--ok": "#84c7a1", "--warn": "#e0b568", "--ink-soft": "#c5d8d3", "--focus": "#8bd8cb",
+            "--rule": "rgba(197,216,211,.09)", "--shadow": "0 7px 20px rgba(0,0,0,.14)"
+          })};
+          for (const [name, value] of Object.entries(palette)) document.documentElement.style.setProperty(name, value);
+        `}
         const data = ${JSON.stringify(data)};
         if (location.hash.includes("/onboarding")) data["yl.v2.meta"] = null;
         const listeners = new Set();
@@ -95,11 +101,14 @@ const server = createServer((req, res) => {
         };
         window.chrome = {
           storage: { local, onChanged: { addListener: fn => listeners.add(fn), removeListener: fn => listeners.delete(fn) } },
-          runtime: { sendMessage: async () => ({ status: "Mock sync complete" }) }
+          runtime: {
+            sendMessage: async () => ({ status: "Mock sync complete" }),
+            getURL: path => location.origin + "/" + path.replace(/^\\//, "")
+          }
         };
         if (location.hash.includes("drill=1")) {
           const timer = setInterval(() => {
-            const row = [...document.querySelectorAll(".legend .legrow")].find(el => el.textContent.includes("News & updates"));
+            const row = [...document.querySelectorAll(".value-trigger")].find(el => el.textContent.includes("News & updates"));
             if (row) { clearInterval(timer); row.click(); }
           }, 100);
           setTimeout(() => clearInterval(timer), 5000);

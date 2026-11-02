@@ -126,7 +126,7 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
                 <div
                   style={{
                     height: Math.max(4, (w.secondsPerOccurrence / maxWeekday) * 90),
-                    background: "linear-gradient(180deg,#3ea6ff,#1d5fbf)",
+                    background: "var(--accent)",
                     borderRadius: 4
                   }}
                 />

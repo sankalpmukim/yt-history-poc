@@ -15,21 +15,24 @@ import { SettingsView } from "./views/settings"
 import { InsightsView } from "./views/insights"
 import { OnboardingView } from "./views/onboarding"
 import { BudgetsView } from "./views/budgets"
+import { NavIcon, type NavIconName } from "./lib/icons"
 
 interface RouteDef {
   id: string
   label: string
+  accessibleLabel: string
+  icon: NavIconName
   el: (props: { data: LedgerData; reload: () => Promise<void> }) => JSX.Element
 }
 
 const ROUTES: RouteDef[] = [
-  { id: "overview", label: "📊 Overview", el: (p) => <OverviewView {...p} /> },
-  { id: "ledger", label: "🧾 Ledger", el: (p) => <LedgerView {...p} /> },
-  { id: "rules", label: "⚖️ Rules", el: (p) => <RulesView {...p} /> },
-  { id: "categories", label: "🏷️ Categories", el: (p) => <CategoriesView {...p} /> },
-  { id: "insights", label: "🔍 Insights", el: (p) => <InsightsView {...p} /> },
-  { id: "budgets", label: "⏱️ Budgets", el: (p) => <BudgetsView {...p} /> },
-  { id: "settings", label: "⚙️ Settings", el: (p) => <SettingsView {...p} /> }
+  { id: "overview", label: "Overview", accessibleLabel: "📊 Overview", icon: "overview", el: (p) => <OverviewView {...p} /> },
+  { id: "ledger", label: "Ledger", accessibleLabel: "🧾 Ledger", icon: "ledger", el: (p) => <LedgerView {...p} /> },
+  { id: "rules", label: "Rules", accessibleLabel: "⚖️ Rules", icon: "rules", el: (p) => <RulesView {...p} /> },
+  { id: "categories", label: "Categories", accessibleLabel: "🏷️ Categories", icon: "categories", el: (p) => <CategoriesView {...p} /> },
+  { id: "insights", label: "Insights", accessibleLabel: "🔍 Insights", icon: "insights", el: (p) => <InsightsView {...p} /> },
+  { id: "budgets", label: "Budgets", accessibleLabel: "⏱️ Budgets", icon: "budgets", el: (p) => <BudgetsView {...p} /> },
+  { id: "settings", label: "Settings", accessibleLabel: "⚙️ Settings", icon: "settings", el: (p) => <SettingsView {...p} /> }
 ]
 
 function useHashRoute(): [string, (id: string) => void] {
@@ -99,7 +102,7 @@ export default function Dashboard() {
       <div className="app">
         <div className="sidebar">
           <div className="brand">
-            <span className="brand-mark" aria-hidden="true">◷</span>
+            <span className="brand-mark"><NavIcon name="overview" /></span>
             YT Ledger <span className="sub">v{APP_VERSION}</span>
           </div>
           <nav className="nav">
@@ -109,9 +112,11 @@ export default function Dashboard() {
                 href={"#/" + r.id}
                 className={r.id === active.id ? "active" : ""}
                 aria-current={r.id === active.id ? "page" : undefined}
+                aria-label={r.accessibleLabel}
                 onClick={() => navigate(r.id)}
               >
-                {r.label}
+                <NavIcon name={r.icon} className="nav-icon" />
+                <span>{r.label}</span>
               </a>
             ))}
           </nav>

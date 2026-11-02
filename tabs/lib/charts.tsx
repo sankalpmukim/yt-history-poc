@@ -28,9 +28,11 @@ export function StackedDailyBars({
   const shown = days.length > maxBars ? days.slice(days.length - maxBars) : days
   const truncated = days.length > shown.length
   const max = Math.max(...shown.map((d) => d.seconds), 1)
-  const chartH = height - 24
-  const width = shown.length * (barW + gap)
-  let x = 0
+  const chartH = height - 34
+  const width = Math.max(960, shown.length * (barW + gap))
+  const step = width / shown.length
+  const points = shown.map((day, i) => `${(i + 0.5) * step},${Math.max(5, chartH - (day.seconds / max) * chartH)}`)
+  const path = points.length > 1 ? `M ${points.join(" L ")}` : ""
   return (
     <div style={{ overflowX: "auto" }}>
       {truncated ? (
@@ -38,10 +40,12 @@ export function StackedDailyBars({
           showing the last {maxBars} days
         </div>
       ) : null}
-      <svg width={Math.max(width, 300)} height={height} role="img">
-        {shown.map((day) => {
-          const barX = x
-          x += barW + gap
+      <svg className="trace-svg" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Daily estimated watch time by category">
+        {[1, 2, 3].map((quarter) => (
+          <line key={quarter} className="trace-ruler" x1={0} y1={(chartH * quarter) / 4} x2={width} y2={(chartH * quarter) / 4} />
+        ))}
+        {shown.map((day, dayIndex) => {
+          const barX = dayIndex * step + (step - barW) / 2
           let y = chartH
           const title = `${fmtDate(day.date)} — ${fmtDur(day.seconds)}\n${day.byCategory
             .map((s) => `${labelOf(s.categoryId)}: ${fmtDur(s.seconds)}`)
@@ -54,6 +58,7 @@ export function StackedDailyBars({
                 return (
                   <rect
                     key={i}
+                    className="trace-bar-segment"
                     x={barX}
                     y={y}
                     width={barW}
@@ -71,13 +76,26 @@ export function StackedDailyBars({
             </g>
           )
         })}
+        {path ? <path className="trace-line" d={path} /> : null}
+        {points.map((point, i) => {
+          const [cx, cy] = point.split(",").map(Number)
+          return <circle key={shown[i].date} className="trace-point" cx={cx} cy={cy} r={3.5} />
+        })}
         <line x1={0} y1={chartH + 0.5} x2={width} y2={chartH + 0.5} stroke="var(--border)" />
-        <text x={0} y={height - 6} fill="var(--muted)" fontSize={10}>
-          {fmtDate(shown[0].date)}
-        </text>
-        <text x={width} y={height - 6} fill="var(--muted)" fontSize={10} textAnchor="end">
-          {fmtDate(shown[shown.length - 1].date)}
-        </text>
+        {shown.length === 1 ? (
+          <text x={width / 2} y={height - 6} fill="var(--muted)" fontSize={10} textAnchor="middle">
+            {fmtDate(shown[0].date)}
+          </text>
+        ) : (
+          <>
+            <text x={4} y={height - 6} fill="var(--muted)" fontSize={10}>
+              {fmtDate(shown[0].date)}
+            </text>
+            <text x={width} y={height - 6} fill="var(--muted)" fontSize={10} textAnchor="end">
+              {fmtDate(shown[shown.length - 1].date)}
+            </text>
+          </>
+        )}
       </svg>
     </div>
   )

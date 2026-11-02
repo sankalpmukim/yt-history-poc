@@ -9,6 +9,7 @@ import { validTargetIds } from "../../core/taxonomy"
 import { BudgetModeControl } from "../lib/ui"
 import { runRulesPass } from "../../core/ledger"
 import { ChromeKV } from "../../core/storage"
+import { NavIcon } from "../lib/icons"
 
 const STEPS = ["Welcome", "Categories", "Starter rules", "Budgets", "Done"]
 
@@ -26,7 +27,7 @@ export function OnboardingView({
   return (
     <div style={{ maxWidth: 760, margin: "40px auto", padding: "0 20px" }}>
       <div className="brand" style={{ fontSize: 22, marginBottom: 18 }}>
-        <span className="brand-mark" aria-hidden="true">◷</span>
+        <span className="brand-mark"><NavIcon name="overview" /></span>
         YT Ledger <span className="sub">setup</span>
       </div>
       <div className="steps">

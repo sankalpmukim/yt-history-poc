@@ -244,10 +244,15 @@ function ensureStyle(): void {
   const s = document.createElement("style")
   s.id = STYLE_ID
   s.textContent = `
+@font-face {
+  font-family: "YT Ledger Display";
+  src: url("${chrome.runtime.getURL("assets/fonts/BarlowCondensed-SemiBold.woff2")}") format("woff2");
+  font-style: normal; font-weight: 600; font-display: swap;
+}
 .${ROOT_CLASS}-chip {
   position: absolute; z-index: 4; left: 6px; top: 6px;
   background: #18323a; color: #fff; border: 1px solid #c58a3a;
-  font: 600 11px/1.25 "Avenir Next", Avenir, Arial, sans-serif;
+  font: 600 11px/1.25 "YT Ledger Display", "Avenir Next", Avenir, Arial, sans-serif;
   padding: 4px 8px; border-radius: 3px; pointer-events: none;
   box-shadow: 0 2px 8px rgba(0,0,0,.55);
 }
@@ -257,13 +262,13 @@ function ensureStyle(): void {
   position: absolute; inset: 0; z-index: 3; display: flex; align-items: center;
   justify-content: center; text-align: center; padding: 10px;
   background: rgba(17,39,44,.94); color: #f5faf7; border: 1px solid #86aaa2;
-  font: 600 12px/1.5 "Avenir Next", Avenir, Arial, sans-serif;
+  font: 600 12px/1.5 "YT Ledger Display", "Avenir Next", Avenir, Arial, sans-serif;
   cursor: pointer; border-radius: 4px; text-shadow: 0 1px 2px #000;
 }
 .${ROOT_CLASS}-banner, .${ROOT_CLASS}-interstitial {
   position: fixed; z-index: 2147483646; left: 50%; transform: translateX(-50%);
   background: #18323a; color: #f4f8f5; border: 1px solid #c58a3a;
-  border-radius: 5px; padding: 14px 17px; font: 13px/1.55 "Avenir Next", Avenir, Arial, sans-serif;
+  border-radius: 5px; padding: 14px 17px; font: 13px/1.55 "YT Ledger Display", "Avenir Next", Avenir, Arial, sans-serif;
   box-shadow: 0 8px 28px rgba(0,0,0,.58); max-width: 480px;
 }
 .${ROOT_CLASS}-banner { top: 64px; }
