@@ -7,7 +7,7 @@ import { loadLedgerData } from "../lib/data"
 import { ChromeKV } from "../../core/storage"
 import { ensureInitialized } from "../../core/ledger"
 import { buildBackup, buildCsv, validateBackup, backupToShards, isLedgerKey } from "../../core/exports"
-import { KEYS, eventsKey } from "../../core/types"
+import { KEYS, eventsKey, isEventsKey } from "../../core/types"
 import { APP_VERSION } from "../../core/version"
 import { BudgetModeControl } from "../lib/ui"
 import { DEFAULT_SUBCATEGORIES } from "../../core/defaults"
@@ -76,6 +76,16 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
       const text = await file.text()
       const backup = validateBackup(text)
       const shards = backupToShards(backup)
+      const confirmation = window.confirm(
+        "Import replaces the current YT Ledger videos, events, categories, subcategories, rules, and settings. Export a backup first if you want to keep them. Continue?"
+      )
+      if (!confirmation) {
+        setImportMsg("import cancelled")
+        return
+      }
+      const current = await chrome.storage.local.get(null)
+      const oldEventKeys = Object.keys(current).filter(isEventsKey)
+      if (oldEventKeys.length) await chrome.storage.local.remove(oldEventKeys)
       const writes: Record<string, unknown> = {
         [KEYS.meta]: backup.data.meta,
         [KEYS.categories]: backup.data.categories,
@@ -233,6 +243,10 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
               e.target.value = ""
             }}
           />
+        </div>
+        <div className="muted small" style={{ marginBottom: 8 }}>
+          Import replaces the current ledger, including existing event shards. Export a backup first.
+          A deterministic QA seed is available at <code>fixtures/qa-seed.json</code>.
         </div>
         {importMsg ? <div className="small" style={{ marginBottom: 8 }}>{importMsg}</div> : null}
         <div className="row">

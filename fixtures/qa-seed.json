@@ -1,0 +1,193 @@
+{
+  "app": "yt-ledger",
+  "backupVersion": 1,
+  "exportedAt": "2026-11-02T18:48:56.792Z",
+  "data": {
+    "meta": {
+      "version": 2,
+      "settings": {
+        "retentionDays": 365,
+        "fetchWindowDays": 14,
+        "budgetMode": "strict",
+        "budgetsWeekly": {
+          "news": 60
+        },
+        "debugOverlay": false,
+        "devRelay": false,
+        "onboardedAt": "2026-11-02T18:48:56.792Z"
+      },
+      "installedAt": "2026-11-02T18:48:56.792Z",
+      "lastSyncedAt": "2026-11-02T18:48:56.792Z",
+      "lastSyncStatus": "QA seed fixture",
+      "lastSyncDiagnostics": null
+    },
+    "categories": [
+      {
+        "id": "news",
+        "name": "News & updates",
+        "emoji": "📰",
+        "color": "#22c55e",
+        "valueScore": 3,
+        "order": 0
+      },
+      {
+        "id": "practical",
+        "name": "Practical how-tos",
+        "emoji": "🛠️",
+        "color": "#3b82f6",
+        "valueScore": 4,
+        "order": 1
+      },
+      {
+        "id": "deep",
+        "name": "Courses & lectures",
+        "emoji": "🎓",
+        "color": "#8b5cf6",
+        "valueScore": 5,
+        "order": 2
+      }
+    ],
+    "subcategories": [
+      {
+        "id": "news-world",
+        "parentId": "news",
+        "name": "World news",
+        "emoji": "🌍",
+        "order": 0
+      },
+      {
+        "id": "news-sports",
+        "parentId": "news",
+        "name": "Sports",
+        "emoji": "🏆",
+        "order": 1
+      },
+      {
+        "id": "practical-coding",
+        "parentId": "practical",
+        "name": "Coding",
+        "emoji": "⌨️",
+        "order": 0
+      },
+      {
+        "id": "practical-cooking",
+        "parentId": "practical",
+        "name": "Cooking",
+        "emoji": "🍳",
+        "order": 1
+      },
+      {
+        "id": "deep-lectures",
+        "parentId": "deep",
+        "name": "Lectures",
+        "emoji": "📚",
+        "order": 0
+      }
+    ],
+    "rules": [
+      {
+        "id": "qa-simple-flying-news",
+        "name": "Simple Flying channel → News › World news (QA fixture)",
+        "enabled": true,
+        "priority": 10,
+        "match": {
+          "channelContains": "Simple Flying"
+        },
+        "categoryId": "news-world",
+        "createdAt": "2026-11-02T18:48:56.792Z",
+        "updatedAt": "2026-11-02T18:48:56.792Z",
+        "hitCount": 0
+      },
+      {
+        "id": "qa-tutorial-coding",
+        "name": "Tutorial titles → Practical › Coding (QA fixture)",
+        "enabled": true,
+        "priority": 20,
+        "match": {
+          "titleRegex": "\\b(tutorial|how to|guide)\\b",
+          "titleRegexFlags": "i"
+        },
+        "categoryId": "practical-coding",
+        "createdAt": "2026-11-02T18:48:56.792Z",
+        "updatedAt": "2026-11-02T18:48:56.792Z",
+        "hitCount": 0
+      }
+    ],
+    "videos": {
+      "ylqa0000001": {
+        "videoId": "ylqa0000001",
+        "title": "QA seed: airline fleet news",
+        "channel": "Simple Flying",
+        "url": "https://www.youtube.com/watch?v=ylqa0000001",
+        "durationSec": 900,
+        "durationSource": "watch-page",
+        "isShort": false,
+        "categoryOverride": null,
+        "autoCategoryId": "news-world",
+        "appliedRuleId": "qa-simple-flying-news",
+        "firstSeenAt": "2026-11-02T18:48:56.792Z",
+        "lastSeenAt": "2026-11-02T18:48:56.792Z"
+      },
+      "ylqa0000002": {
+        "videoId": "ylqa0000002",
+        "title": "QA seed: aircraft industry update",
+        "channel": "Simple Flying",
+        "url": "https://www.youtube.com/watch?v=ylqa0000002",
+        "durationSec": 900,
+        "durationSource": "watch-page",
+        "isShort": false,
+        "categoryOverride": null,
+        "autoCategoryId": "news-world",
+        "appliedRuleId": "qa-simple-flying-news",
+        "firstSeenAt": "2026-11-02T18:48:56.792Z",
+        "lastSeenAt": "2026-11-02T18:48:56.792Z"
+      },
+      "ylqa0000003": {
+        "videoId": "ylqa0000003",
+        "title": "QA seed: aircraft maintenance tutorial",
+        "channel": "Simple Flying",
+        "url": "https://www.youtube.com/watch?v=ylqa0000003",
+        "durationSec": 600,
+        "durationSource": "watch-page",
+        "isShort": false,
+        "categoryOverride": null,
+        "autoCategoryId": "practical-coding",
+        "appliedRuleId": "qa-tutorial-coding",
+        "firstSeenAt": "2026-11-02T18:48:56.792Z",
+        "lastSeenAt": "2026-11-02T18:48:56.792Z"
+      }
+    },
+    "events": {
+      "ylqa0000001|2026-11-02": {
+        "key": "ylqa0000001|2026-11-02",
+        "videoId": "ylqa0000001",
+        "watchedOn": "2026-11-02",
+        "progressPct": 100,
+        "progressAvgPct": 100,
+        "occurrences": 1,
+        "firstSeenAt": "2026-11-02T18:48:56.792Z",
+        "lastSeenAt": "2026-11-02T18:48:56.792Z"
+      },
+      "ylqa0000002|2026-11-02": {
+        "key": "ylqa0000002|2026-11-02",
+        "videoId": "ylqa0000002",
+        "watchedOn": "2026-11-02",
+        "progressPct": 100,
+        "progressAvgPct": 100,
+        "occurrences": 1,
+        "firstSeenAt": "2026-11-02T18:48:56.792Z",
+        "lastSeenAt": "2026-11-02T18:48:56.792Z"
+      },
+      "ylqa0000003|2026-11-02": {
+        "key": "ylqa0000003|2026-11-02",
+        "videoId": "ylqa0000003",
+        "watchedOn": "2026-11-02",
+        "progressPct": 100,
+        "progressAvgPct": 100,
+        "occurrences": 1,
+        "firstSeenAt": "2026-11-02T18:48:56.792Z",
+        "lastSeenAt": "2026-11-02T18:48:56.792Z"
+      }
+    }
+  }
+}

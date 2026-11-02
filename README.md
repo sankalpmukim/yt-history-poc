@@ -5,7 +5,7 @@ YouTube watch history (watch events = transactions, categories = spending
 categories, value scores = the inverse of cost, budgets = time budgets).
 See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
 
-**Status: subcategories + QA fixes (0.8.1)** — expense-manager-style children under each
+**Status: subcategories + QA fixes (0.8.2)** — expense-manager-style children under each
 top-level category. Videos/rules assign to a sub or the parent; chips and
 pickers show `Parent › Sub`; Overview charts are top-level with click-to-drill
 into subs; budgets still roll up to the parent. Existing category-level
@@ -13,6 +13,21 @@ assignments keep working; installs that predate this key get default subs
 seeded once. Ledger also shows the value tier; budget modes use an accessible,
 live-updating segmented control. Day-label parsing has explicit year-boundary
 coverage and correctly interprets labels such as `Oct 31`.
+
+## Deterministic budget-guard QA seed
+
+Run `pnpm qa:seed` to refresh `fixtures/qa-seed.json` with sample events dated
+in the current local week, a 60-second News budget, 30 minutes of seeded
+News › World news watch time, subcategories, and channel/title rules. In YT
+Ledger, export your current JSON backup first, then use **Settings → Import
+JSON** and select `fixtures/qa-seed.json`. Import replaces the current ledger
+and asks for confirmation. The seed selects Strict mode; Settings → Budgets
+should show News over budget. On YouTube, search for **Simple Flying** to test
+matching result placeholders; Home and sidebar cards use the same guard when
+matching channel videos appear. Click a feed veil to reveal its card. Watch
+pages retain the separate **Watch anyway** interstitial. Import your exported
+backup afterward to restore your data. Synthetic video IDs are ledger-only;
+the channel rule classifies real search results.
 
 **Status: M8 complete** — everything in M7 plus **on-YouTube budget
 enforcement** (`contents/budget-guard.ts`): Off (default, zero DOM changes),

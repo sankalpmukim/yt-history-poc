@@ -327,20 +327,35 @@ function applyStrict(card: Element, videoId: string, categoryId: string): void {
   const title =
     (card.querySelector("#video-title") as HTMLElement | null) ||
     (card.querySelector("h3") as HTMLElement | null)
-  if (host) {
-    if (getComputedStyle(host).position === "static") host.style.position = "relative"
-    host.classList.add(ROOT_CLASS + "-strict-blur")
-    const veil = document.createElement("div")
-    veil.className = `${ROOT_CLASS} ${ROOT_CLASS}-veil`
-    veil.textContent = `hidden — ${catName(categoryId)} over budget (click to reveal)`
-    veil.addEventListener("click", (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      state.revealed.add(videoId)
-      unapplyCard(card)
-    })
-    host.appendChild(veil)
-  }
+  const veilHost = (host || card) as HTMLElement
+  if (getComputedStyle(veilHost).position === "static") veilHost.style.position = "relative"
+
+  // Blur the thumbnail media, not its host. Applying filter to the host also
+  // blurs every descendant, including the placeholder veil (the M8-012 bug).
+  // Prefer image/video nodes; for YouTube's newer wrappers, blur their direct
+  // visual children as a fallback while keeping the veil itself crisp.
+  const mediaRoot = host || card
+  const media = Array.from(mediaRoot.querySelectorAll<HTMLElement>(
+    "img, video, canvas, [id='img'], .ytCoreImageHost"
+  ))
+  const targets = media.length
+    ? media
+    : Array.from(mediaRoot.children).filter(
+        (child): child is HTMLElement =>
+          child instanceof HTMLElement && !child.classList.contains(`${ROOT_CLASS}-veil`)
+      )
+  for (const target of targets) target.classList.add(`${ROOT_CLASS}-strict-blur`)
+
+  const veil = document.createElement("div")
+  veil.className = `${ROOT_CLASS} ${ROOT_CLASS}-veil`
+  veil.textContent = `hidden — ${catName(categoryId)} over budget (click to reveal)`
+  veil.addEventListener("click", (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    state.revealed.add(videoId)
+    unapplyCard(card)
+  })
+  veilHost.appendChild(veil)
   if (title) title.classList.add(ROOT_CLASS + "-strict-blur")
 }
 

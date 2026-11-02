@@ -1,13 +1,14 @@
 {
   "name": "yt-ledger",
   "displayName": "YT Ledger",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "An expense manager for your YouTube watch history — categorize what you watch, see where the time goes, budget it. Local-only.",
   "private": true,
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",
     "package": "plasmo package",
+    "qa:seed": "node scripts/create-qa-seed.mjs",
     "test": "rm -rf .test && esbuild core/*.test.ts utils/*.test.ts --bundle --platform=node --format=esm --outdir=.test && node --test .test/"
   },
   "dependencies": {
