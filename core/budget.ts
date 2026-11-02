@@ -6,9 +6,10 @@
  * themselves.
  */
 
-import type { Category, VideoRecord, WatchEvent } from "./types"
+import type { Category, Subcategory, VideoRecord, WatchEvent } from "./types"
 import { estimateEventSeconds } from "./estimate"
 import { effectiveCategoryId } from "./rules"
+import { topLevelCategoryId } from "./taxonomy"
 
 export interface BudgetStatusEntry {
   categoryId: string
@@ -48,6 +49,7 @@ export function computeBudgetStatus(params: {
   videos: Record<string, VideoRecord>
   events: WatchEvent[]
   categories: Category[]
+  subcategories?: Subcategory[]
   budgetsWeekly: Record<string, number>
   now: Date
 }): BudgetStatus {
@@ -67,7 +69,11 @@ export function computeBudgetStatus(params: {
     if (event.watchedOn < weekStart || event.watchedOn >= weekEnd) continue
     const video = params.videos[event.videoId]
     if (!video) continue
-    const cat = effectiveCategoryId(video)
+    const cat = topLevelCategoryId(
+      effectiveCategoryId(video),
+      params.categories,
+      params.subcategories ?? []
+    )
     if (cat == null) continue
     const est = estimateEventSeconds(event, video)
     if (est.seconds == null) continue

@@ -6,10 +6,11 @@
  * treat as over-budget).
  */
 
-import type { VideoRecord } from "./types"
+import type { Category, Subcategory, VideoRecord } from "./types"
 import { effectiveCategoryId } from "./rules"
 import type { CompiledRule } from "./rules"
 import { matchFirstRule } from "./rules"
+import { topLevelCategoryId } from "./taxonomy"
 
 export interface ClassifyInput {
   stored: VideoRecord | undefined
@@ -43,4 +44,15 @@ export function isCategoryOverBudget(
   overCategories: Set<string>
 ): boolean {
   return categoryId != null && overCategories.has(categoryId)
+}
+
+/** Roll a category-or-sub target up to its parent, then check the over set. */
+export function isTargetOverBudget(
+  targetId: string | null,
+  overCategories: Set<string>,
+  categories: Category[],
+  subcategories: Subcategory[]
+): boolean {
+  const top = topLevelCategoryId(targetId, categories, subcategories)
+  return top != null && overCategories.has(top)
 }

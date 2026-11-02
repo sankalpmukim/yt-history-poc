@@ -1,7 +1,8 @@
 /** Shared UI atoms for the dashboard. */
 
 import { useEffect, useState, type ReactNode } from "react"
-import type { Category } from "../../core/types"
+import type { Category, Subcategory } from "../../core/types"
+import { chipLabelForTarget } from "../../core/taxonomy"
 
 export function fmtDur(seconds: number | null | undefined): string {
   if (seconds == null) return "—"
@@ -45,29 +46,40 @@ export function catColor(cat: Category | undefined): string {
 
 export function CategoryChip({
   category,
+  targetId,
+  categories,
+  subcategories,
   onClick,
   small
 }: {
-  category: Category | undefined
+  category?: Category | undefined
+  targetId?: string | null
+  categories?: Category[]
+  subcategories?: Subcategory[]
   onClick?: () => void
   small?: boolean
 }) {
-  if (!category) {
+  const chip =
+    targetId !== undefined && categories
+      ? chipLabelForTarget(targetId, categories, subcategories ?? [])
+      : category
+        ? { emoji: category.emoji, text: category.name, color: category.color }
+        : null
+  if (!chip) {
     return (
       <button className="chip none" onClick={onClick} title="Uncategorized — click to categorize">
         ？ Uncategorized
       </button>
     )
   }
-  const color = catColor(category)
   return (
     <button
       className="chip"
       onClick={onClick}
-      style={{ color, borderColor: color + "88", fontSize: small ? 11 : undefined }}
-      title={category.name}
+      style={{ color: chip.color, borderColor: chip.color + "88", fontSize: small ? 11 : undefined }}
+      title={chip.text}
     >
-      {category.emoji} {category.name}
+      {chip.emoji} {chip.text}
     </button>
   )
 }
@@ -85,6 +97,7 @@ export function CategoryModal({
   title,
   contextLine,
   categories,
+  subcategories = [],
   current,
   channel,
   onChoose,
@@ -93,6 +106,7 @@ export function CategoryModal({
   title: string
   contextLine?: ReactNode
   categories: Category[]
+  subcategories?: Subcategory[]
   current: string | null
   channel?: string
   onChoose: (choice: CategoryChoice) => void
@@ -108,6 +122,8 @@ export function CategoryModal({
     return () => window.removeEventListener("keydown", onKey)
   }, [onClose])
   const live = categories.filter((c) => !c.archivedAt)
+  const liveSubs = (parentId: string) =>
+    subcategories.filter((s) => s.parentId === parentId && !s.archivedAt).sort((a, b) => a.order - b.order)
   return (
     <div
       className="overlay"
@@ -115,24 +131,40 @@ export function CategoryModal({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="menu">
+      <div className="menu" style={{ width: 420 }}>
         <h3>{title}</h3>
         {contextLine ? <div className="muted small" style={{ marginBottom: 10 }}>{contextLine}</div> : null}
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 360, overflowY: "auto" }}>
           {live.map((c) => (
-            <button
-              key={c.id}
-              className="opt"
-              onClick={() => setSelected(c.id)}
-              style={selected === c.id ? { background: "#262d3d" } : undefined}
-            >
-              <span>
-                {c.emoji} {c.name}
-              </span>
-              <span className="muted small" style={{ marginLeft: "auto" }}>
-                value {c.valueScore}/5
-              </span>
-            </button>
+            <div key={c.id}>
+              <button
+                className="opt"
+                onClick={() => setSelected(c.id)}
+                style={selected === c.id ? { background: "#262d3d" } : undefined}
+              >
+                <span>
+                  {c.emoji} {c.name}
+                </span>
+                <span className="muted small" style={{ marginLeft: "auto" }}>
+                  value {c.valueScore}/5
+                </span>
+              </button>
+              {liveSubs(c.id).map((s) => (
+                <button
+                  key={s.id}
+                  className="opt"
+                  onClick={() => setSelected(s.id)}
+                  style={{
+                    paddingLeft: 28,
+                    ...(selected === s.id ? { background: "#262d3d" } : {})
+                  }}
+                >
+                  <span>
+                    {s.emoji} {c.name} › {s.name}
+                  </span>
+                </button>
+              ))}
+            </div>
           ))}
         </div>
         {channel ? (

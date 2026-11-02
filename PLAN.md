@@ -53,6 +53,7 @@ value score = the inverse of cost · budgets = time budgets.**
 | 7 | `deep` | 🎓 | Courses & lectures | 5 | Lectures, courses, conference talks, documentaries |
 
 - Users can rename, re-score, re-color, add, archive, and reorder categories. New categories can slot anywhere on the 0–5 ladder.
+- **Subcategories** (expense-manager style, ✅ 2026-11-02): each top-level category has editable, reorderable, archivable subcategories (same customizability as categories). Videos and rules assign to a **subcategory or the parent** (when no sub fits). Charts show **top-level by default**; click a category to drill into its subs (with a back control). Pickers, Ledger chips, and rule targets show `Parent › Sub` (e.g. `Practical how-tos › Coding`). Budgets stay **top-level** (sub time rolls up). Stored as `yl.v2.subcategories`; existing category-level assignments keep working. Default subs ship with the 8 parents; onboarding can tweak names.
 - "Uncategorized" is a first-class bucket surfaced as a review queue (never silently assigned).
 - ✅ **Onboarding (first install)** walks the user through categories + starter
   rules so the starting set is *theirs*; if onboarding is skipped or fails, fall

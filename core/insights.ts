@@ -3,7 +3,7 @@
  * rule suggestions derived from user behavior.
  */
 
-import type { Category, VideoRecord, WatchEvent } from "./types"
+import type { Category, Subcategory, VideoRecord, WatchEvent } from "./types"
 import { aggregateRange } from "./aggregate"
 
 export interface ChannelStat {
@@ -17,6 +17,7 @@ export function channelTimeByScoreBand(params: {
   videos: Record<string, VideoRecord>
   events: WatchEvent[]
   categories: Category[]
+  subcategories?: Subcategory[]
   from?: string | null
   minScore: number
   maxScore: number
@@ -26,6 +27,7 @@ export function channelTimeByScoreBand(params: {
     videos: params.videos,
     events: params.events,
     categories: params.categories,
+    subcategories: params.subcategories,
     from: params.from ?? null
   })
   const scoreOf = new Map(params.categories.map((c) => [c.id, c.valueScore] as const))
@@ -112,6 +114,7 @@ export function suggestChannelRules(params: {
   videos: Record<string, VideoRecord>
   events: WatchEvent[]
   categories: Category[]
+  subcategories?: Subcategory[]
   from?: string | null
   limit?: number
 }): RuleSuggestion[] {
@@ -119,6 +122,7 @@ export function suggestChannelRules(params: {
     videos: params.videos,
     events: params.events,
     categories: params.categories,
+    subcategories: params.subcategories,
     from: params.from ?? null
   })
   const out: RuleSuggestion[] = []

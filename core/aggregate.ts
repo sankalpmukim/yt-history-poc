@@ -8,15 +8,20 @@
  * (uncategorized time is reported separately, never scored as zero).
  */
 
-import type { Category, VideoRecord, WatchEvent } from "./types"
+import type { Category, Subcategory, VideoRecord, WatchEvent } from "./types"
 import { estimateEventSeconds } from "./estimate"
 import type { EstimateConfidence } from "./estimate"
 import { effectiveCategoryId } from "./rules"
+import { topLevelCategoryId } from "./taxonomy"
 
 export interface LedgerRow {
   event: WatchEvent
   video: VideoRecord
+  /** raw assignment (category or subcategory id) */
+  targetId: string | null
+  /** top-level category id (parent of a sub, or the category itself) */
   categoryId: string | null
+  subcategoryId: string | null
   estimatedSeconds: number | null
   confidence: EstimateConfidence
 }
@@ -67,6 +72,9 @@ export function aggregateRange(params: {
   videos: Record<string, VideoRecord>
   events: WatchEvent[]
   categories: Category[]
+  subcategories?: Subcategory[]
+  /** when set, only that parent’s rows, grouped by subcategory (or parent-only) */
+  drilldownParentId?: string | null
   /** inclusive yyyy-mm-dd, null = open start */
   from?: string | null
   /** inclusive yyyy-mm-dd, null = open end */
@@ -74,7 +82,9 @@ export function aggregateRange(params: {
 }): Aggregate {
   const from = params.from ?? null
   const to = params.to ?? null
+  const subs = params.subcategories ?? []
   const scoreOf = new Map(params.categories.map((c) => [c.id, c.valueScore] as const))
+  const drill = params.drilldownParentId ?? null
 
   const rows: LedgerRow[] = []
   for (const event of params.events) {
@@ -83,10 +93,17 @@ export function aggregateRange(params: {
     const video = params.videos[event.videoId]
     if (!video) continue // orphan event (video pruned) — skip
     const est = estimateEventSeconds(event, video)
+    const targetId = effectiveCategoryId(video)
+    const categoryId = topLevelCategoryId(targetId, params.categories, subs)
+    const subcategoryId =
+      targetId != null && targetId !== categoryId ? targetId : null
+    if (drill && categoryId !== drill) continue
     rows.push({
       event,
       video,
-      categoryId: effectiveCategoryId(video),
+      targetId,
+      categoryId,
+      subcategoryId,
       estimatedSeconds: est.seconds,
       confidence: est.confidence
     })
@@ -115,7 +132,8 @@ export function aggregateRange(params: {
     } else {
       totalSeconds += secs
     }
-    const cat = catMap.get(row.categoryId) ?? {
+    const groupId = drill ? row.subcategoryId ?? row.categoryId : row.categoryId
+    const cat = catMap.get(groupId) ?? {
       seconds: 0,
       watchCount: 0,
       videos: new Set<string>(),
@@ -129,7 +147,7 @@ export function aggregateRange(params: {
       cat.channels.set(ch, (cat.channels.get(ch) ?? 0) + secs)
       const day = dayMap.get(row.event.watchedOn) ?? { seconds: 0, byCategory: new Map() }
       day.seconds += secs
-      day.byCategory.set(row.categoryId, (day.byCategory.get(row.categoryId) ?? 0) + secs)
+      day.byCategory.set(groupId, (day.byCategory.get(groupId) ?? 0) + secs)
       dayMap.set(row.event.watchedOn, day)
 
       if (row.categoryId == null) {
@@ -143,7 +161,7 @@ export function aggregateRange(params: {
         }
       }
     }
-    catMap.set(row.categoryId, cat)
+    catMap.set(groupId, cat)
   }
 
   const byCategory: CategoryAgg[] = [...catMap.entries()]

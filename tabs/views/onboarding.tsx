@@ -5,6 +5,7 @@ import type { LedgerData } from "../lib/data"
 import { patchSettings, writeCategories, writeRules } from "../lib/data"
 import type { Category, Rule } from "../../core/types"
 import { compileRules, previewMatches } from "../../core/rules"
+import { validTargetIds } from "../../core/taxonomy"
 import { runRulesPass } from "../../core/ledger"
 import { ChromeKV } from "../../core/storage"
 
@@ -132,20 +133,29 @@ function CategoriesStep({
       <h2>Your value ladder (0 = brain rot → 5 = deep learning)</h2>
       <p className="muted small">
         Rename or re-score anything — the ladder drives the "time value index". Colors, emoji,
-        ordering and new categories can be managed later in the Categories tab.
+        ordering, subcategories, and new categories can be managed later in the Categories tab.
       </p>
       {cats.map((c) => (
-        <div key={c.id} className="queueitem">
-          <span style={{ width: 30 }}>{c.emoji}</span>
-          <input type="text" value={c.name} style={{ flex: 1 }} onChange={(e) => update(c.id, { name: e.target.value })} />
-          <label className="small">
-            value
-            <select value={c.valueScore} onChange={(e) => update(c.id, { valueScore: Number(e.target.value) as Category["valueScore"] })}>
-              {[0, 1, 2, 3, 4, 5].map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </label>
+        <div key={c.id}>
+          <div className="queueitem">
+            <span style={{ width: 30 }}>{c.emoji}</span>
+            <input type="text" value={c.name} style={{ flex: 1 }} onChange={(e) => update(c.id, { name: e.target.value })} />
+            <label className="small">
+              value
+              <select value={c.valueScore} onChange={(e) => update(c.id, { valueScore: Number(e.target.value) as Category["valueScore"] })}>
+                {[0, 1, 2, 3, 4, 5].map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="muted small" style={{ paddingLeft: 42, marginBottom: 6 }}>
+            {data.subcategories
+              .filter((s) => s.parentId === c.id && !s.archivedAt)
+              .sort((a, b) => a.order - b.order)
+              .map((s) => s.name)
+              .join(" · ") || "no subcategories"}
+          </div>
         </div>
       ))}
       <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>
@@ -169,7 +179,10 @@ function StarterRulesStep({
     [...data.rules].sort((a, b) => a.priority - b.priority)
   )
   const videosArr = useMemo(() => Object.values(data.videos), [data.videos])
-  const validIds = useMemo(() => new Set(data.categories.map((c) => c.id)), [data.categories])
+  const validIds = useMemo(
+    () => validTargetIds(data.categories, data.subcategories),
+    [data.categories, data.subcategories]
+  )
 
   const matchCount = (rule: Rule): number => {
     if (!rule.enabled) return 0

@@ -210,9 +210,9 @@ test("applySyncResult auto-categorizes via starter rules; overrides win", async 
   const pass = await runRulesPass(kv, NOW)
 
   const out = (await kv.get(KEYS.videos)) as any
-  assert.equal(out.tut.autoCategoryId, "practical", "starter tutorial rule applied")
+  assert.equal(out.tut.autoCategoryId, "practical-coding", "starter tutorial rule applied")
   assert.equal(out.tut.appliedRuleId, "starter-tutorial")
-  assert.equal(out.lec.autoCategoryId, "deep", "starter lecture rule applied")
+  assert.equal(out.lec.autoCategoryId, "deep-lectures", "starter lecture rule applied")
   assert.equal(out.cat.autoCategoryId, null, "no match → uncategorized")
   assert.equal(out.over.autoCategoryId, null, "manual override blocks rules")
   assert.equal(out.over.categoryOverride, "fun")
@@ -278,7 +278,7 @@ test("rules retry when duration evidence arrives later", async () => {
 
   const pass = await runRulesPass(kv, NOW)
   videos = (await kv.get(KEYS.videos)) as any
-  assert.equal(videos.sh.autoCategoryId, "brain-rot", "assigned once evidence exists")
+  assert.equal(videos.sh.autoCategoryId, "brain-rot-shorts", "assigned once evidence exists")
   assert.equal(pass.changedCount, 1)
 })
 

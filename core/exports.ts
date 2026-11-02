@@ -3,10 +3,11 @@
  * Pure: the file I/O lives in the settings view.
  */
 
-import type { Category, MetaState, Rule, VideoRecord, WatchEvent } from "./types"
+import type { Category, MetaState, Rule, Subcategory, VideoRecord, WatchEvent } from "./types"
 import { KEYS } from "./types"
 import { estimateEventSeconds } from "./estimate"
 import { effectiveCategoryId } from "./rules"
+import { labelForTarget, resolveTarget } from "./taxonomy"
 
 export interface BackupShape {
   app: "yt-ledger"
@@ -15,6 +16,7 @@ export interface BackupShape {
   data: {
     meta: MetaState | null
     categories: Category[]
+    subcategories?: Subcategory[]
     rules: Rule[]
     videos: Record<string, VideoRecord>
     /** flat: every event, keyed by event.key */
@@ -25,6 +27,7 @@ export interface BackupShape {
 export function buildBackup(params: {
   meta: MetaState | null
   categories: Category[]
+  subcategories?: Subcategory[]
   rules: Rule[]
   videos: Record<string, VideoRecord>
   events: WatchEvent[]
@@ -39,6 +42,7 @@ export function buildBackup(params: {
     data: {
       meta: params.meta,
       categories: params.categories,
+      subcategories: params.subcategories ?? [],
       rules: params.rules,
       videos: params.videos,
       events
@@ -92,14 +96,16 @@ export function buildCsv(params: {
   videos: Record<string, VideoRecord>
   events: WatchEvent[]
   categories: Category[]
+  subcategories?: Subcategory[]
 }): string {
-  const catName = new Map(params.categories.map((c) => [c.id, c.name] as const))
+  const subs = params.subcategories ?? []
   const header = [
     "date",
     "videoId",
     "title",
     "channel",
     "category",
+    "subcategory",
     "categorySource",
     "durationSec",
     "progressPct",
@@ -120,6 +126,7 @@ export function buildCsv(params: {
     if (!v) continue
     const est = estimateEventSeconds(ev, v)
     const cat = effectiveCategoryId(v)
+    const resolved = resolveTarget(cat, params.categories, subs)
     const source = v.categoryOverride != null ? "manual" : v.appliedRuleId ? "rule" : "none"
     rows.push(
       [
@@ -127,7 +134,8 @@ export function buildCsv(params: {
         ev.videoId,
         v.title,
         v.channel,
-        cat == null ? "" : catName.get(cat) ?? cat,
+        resolved?.category.name ?? "",
+        resolved?.subcategory?.name ?? "",
         source,
         v.durationSec,
         ev.progressPct,

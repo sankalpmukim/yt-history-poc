@@ -95,6 +95,6 @@ test("buildCsv emits header + one row per event with escapes", () => {
   assert.ok(lines[1].startsWith("2026-11-02,b,"))
   assert.ok(lines[1].includes(",none,"), "unmatched video → source none")
   assert.ok(lines[2].includes('"Video ""best"", part 1"'), "CSV quoting")
-  assert.ok(lines[2].includes(",Fun,rule,"), "rule-sourced category")
+  assert.ok(lines[2].includes(",Fun,,rule,"), "rule-sourced category, empty subcategory")
   assert.ok(lines[2].includes(",300,high,"), "estimate 600×50%")
 })

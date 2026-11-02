@@ -18,6 +18,16 @@ export interface Category {
   archivedAt?: string
 }
 
+/** Child of a top-level category. Ids are unique across categories + subs. */
+export interface Subcategory {
+  id: string
+  parentId: string
+  name: string
+  emoji: string
+  order: number
+  archivedAt?: string
+}
+
 export interface RuleMatch {
   /** exact channel name, case-insensitive */
   channelEquals?: string
@@ -39,6 +49,7 @@ export interface Rule {
   /** lower wins; first match wins */
   priority: number
   match: RuleMatch
+  /** assignment target: a live category id OR subcategory id */
   categoryId: string
   createdAt: string
   updatedAt: string
@@ -54,9 +65,9 @@ export interface VideoRecord {
   durationSec: number | null
   durationSource: DurationSource | null
   isShort: boolean | null
-  /** manual assignment — always wins over rules */
+  /** manual assignment (category or subcategory id) — always wins over rules */
   categoryOverride: string | null
-  /** last rule result */
+  /** last rule result (category or subcategory id) */
   autoCategoryId: string | null
   appliedRuleId: string | null
   firstSeenAt: string
@@ -122,6 +133,7 @@ export const KEYS = {
   meta: "yl.v2.meta",
   videos: "yl.v2.videos",
   categories: "yl.v2.categories",
+  subcategories: "yl.v2.subcategories",
   rules: "yl.v2.rules",
   durationQueue: "yl.v2.durationQueue",
   durationAttempts: "yl.v2.durationAttempts",

@@ -9,6 +9,7 @@ import type {
   Category,
   MetaState,
   Rule,
+  Subcategory,
   VideoRecord,
   WatchEvent
 } from "./types"
@@ -89,6 +90,11 @@ export async function readVideos(
 export async function readCategories(kv: KV): Promise<Category[]> {
   const c = await kv.get(KEYS.categories)
   return Array.isArray(c) ? (c as Category[]) : []
+}
+
+export async function readSubcategories(kv: KV): Promise<Subcategory[]> {
+  const s = await kv.get(KEYS.subcategories)
+  return Array.isArray(s) ? (s as Subcategory[]) : []
 }
 
 export async function readRules(kv: KV): Promise<Rule[]> {

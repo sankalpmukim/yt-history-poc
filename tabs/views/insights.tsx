@@ -29,6 +29,7 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
         videos: data.videos,
         events: data.events,
         categories: data.categories,
+        subcategories: data.subcategories,
         from,
         minScore: 0,
         maxScore: 1
@@ -41,6 +42,7 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
         videos: data.videos,
         events: data.events,
         categories: data.categories,
+        subcategories: data.subcategories,
         from,
         minScore: 4,
         maxScore: 5
@@ -53,13 +55,20 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
         videos: data.videos,
         events: data.events,
         categories: data.categories,
+        subcategories: data.subcategories,
         from
       }),
     [data, from]
   )
   const weekdays = useMemo(() => weekdayAverages(agg.byDay), [agg])
   const suggestions = useMemo(
-    () => suggestChannelRules({ videos: data.videos, events: data.events, categories: data.categories, from }),
+    () =>
+      suggestChannelRules({
+        videos: data.videos,
+        events: data.events,
+        categories: data.categories,
+        from
+      }),
     [data, from]
   )
   const maxWeekday = Math.max(...weekdays.map((w) => w.secondsPerOccurrence), 1)
@@ -162,6 +171,7 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
         <CategoryModal
           title={`Always categorize “${pickerChannel}” as…`}
           categories={data.categories}
+          subcategories={data.subcategories}
           current={null}
           onChoose={async (choice) => {
             if (choice.categoryId) {

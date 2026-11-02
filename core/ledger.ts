@@ -9,12 +9,13 @@
 import type { HistorySection, StoreShape } from "../utils/history-types"
 import type { MetaState, SyncDiagnostics } from "./types"
 import { KEYS, monthOf, dateKeyOf, eventsKey } from "./types"
-import { readMeta, readVideos, readEventShards, writeEventShard, readDurationQueue, readRules, readCategories } from "./storage"
+import { readMeta, readVideos, readEventShards, writeEventShard, readDurationQueue, readRules, readCategories, readSubcategories } from "./storage"
 import type { KV } from "./storage"
 import { mergeFetchResult } from "./merge"
 import { migrateV1Store } from "./migrate"
-import { DEFAULT_CATEGORIES, fallbackStarterRules, defaultMeta } from "./defaults"
+import { DEFAULT_CATEGORIES, DEFAULT_SUBCATEGORIES, fallbackStarterRules, defaultMeta } from "./defaults"
 import { compileRules, matchFirstRule, targetOfVideo } from "./rules"
+import { validTargetIds } from "./taxonomy"
 import { dayLabelToDate } from "../utils/day"
 
 const LEGACY_V1_KEY = "ytHistoryPoc.v1"
@@ -35,10 +36,19 @@ export async function ensureInitialized(kv: KV, now: Date): Promise<void> {
     await kv.set({
       [KEYS.meta]: defaultMeta(nowIso),
       [KEYS.categories]: DEFAULT_CATEGORIES,
+      [KEYS.subcategories]: DEFAULT_SUBCATEGORIES,
       [KEYS.rules]: fallbackStarterRules(nowIso)
     })
   }
   await maybeMigrateV1(kv, now)
+  await ensureSubcategories(kv)
+}
+
+/** Seed default subs once for installs that predate the subcategories key. */
+async function ensureSubcategories(kv: KV): Promise<void> {
+  const existing = await kv.get(KEYS.subcategories)
+  if (Array.isArray(existing)) return
+  await kv.set({ [KEYS.subcategories]: DEFAULT_SUBCATEGORIES })
 }
 
 /**
@@ -171,12 +181,10 @@ export interface RulesPassResult {
 export async function runRulesPass(kv: KV, now: Date): Promise<RulesPassResult> {
   const rules = await readRules(kv)
   const categories = await readCategories(kv)
+  const subcategories = await readSubcategories(kv)
   const storedVideos = await readVideos(kv)
 
-  const validCategoryIds = new Set(
-    categories.filter((c) => !c.archivedAt).map((c) => c.id)
-  )
-  const compiled = compileRules(rules, validCategoryIds)
+  const compiled = compileRules(rules, validTargetIds(categories, subcategories))
 
   const nowIso = now.toISOString()
   const videos: Record<string, typeof storedVideos[string]> = { ...storedVideos }

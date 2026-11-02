@@ -20,6 +20,7 @@ import { StackedDailyBars, Donut } from "../lib/charts"
 export function OverviewView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const [range, setRange] = useState<string>("30d")
   const [pickerFor, setPickerFor] = useState<string | null>(null)
+  const [drill, setDrill] = useState<string | null>(null)
 
   const agg = useMemo(
     () =>
@@ -27,17 +28,36 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
         videos: data.videos,
         events: data.events,
         categories: data.categories,
+        subcategories: data.subcategories,
+        drilldownParentId: drill,
         from: rangeFromDate(range)
       }),
-    [data, range]
+    [data, range, drill]
   )
 
   const catById = useMemo(
     () => new Map(data.categories.map((c) => [c.id, c] as const)),
     [data.categories]
   )
-  const colorOf = (id: string | null) => (id == null ? "#6b7280" : catById.get(id)?.color ?? "#6b7280")
-  const labelOf = (id: string | null) => (id == null ? "Uncategorized" : catById.get(id)?.name ?? id)
+  const subById = useMemo(
+    () => new Map(data.subcategories.map((s) => [s.id, s] as const)),
+    [data.subcategories]
+  )
+  const colorOf = (id: string | null) => {
+    if (id == null) return "#6b7280"
+    const cat = catById.get(id)
+    if (cat) return cat.color
+    const sub = subById.get(id)
+    return (sub && catById.get(sub.parentId)?.color) || "#6b7280"
+  }
+  const labelOf = (id: string | null) => {
+    if (id == null) return "Uncategorized"
+    const sub = subById.get(id)
+    if (sub) return sub.name
+    const cat = catById.get(id)
+    if (cat) return drill === id ? `${cat.name} (no sub)` : cat.name
+    return id
+  }
 
   const queue = useMemo(
     () => uncategorizedVideos({ videos: data.videos, events: data.events, limit: 12 }),
@@ -75,12 +95,32 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
       </div>
 
       <div className="card">
-        <h2>Daily watch time by category</h2>
+        <div className="spread">
+          <h2>
+            {drill
+              ? `Daily watch time · ${catById.get(drill)?.name ?? drill}`
+              : "Daily watch time by category"}
+          </h2>
+          {drill ? (
+            <button className="btn btn-sm" onClick={() => setDrill(null)}>
+              ← All categories
+            </button>
+          ) : null}
+        </div>
         <StackedDailyBars days={agg.byDay} colorOf={colorOf} labelOf={labelOf} />
       </div>
 
       <div className="card">
-        <h2>Where the time went</h2>
+        <div className="spread">
+          <h2>{drill ? `Breakdown · ${catById.get(drill)?.name ?? drill}` : "Where the time went"}</h2>
+          {drill ? (
+            <button className="btn btn-sm" onClick={() => setDrill(null)}>
+              ← All categories
+            </button>
+          ) : (
+            <span className="muted small">click a category to see subcategories</span>
+          )}
+        </div>
         <div className="row" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
           <Donut
             slices={agg.byCategory.map((c) => ({ categoryId: c.categoryId, seconds: c.seconds }))}
@@ -90,7 +130,15 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
           />
           <div className="legend">
             {agg.byCategory.map((c) => (
-              <div key={c.categoryId ?? "none"} className="legrow">
+              <div
+                key={c.categoryId ?? "none"}
+                className="legrow"
+                style={{ cursor: !drill && c.categoryId ? "pointer" : undefined }}
+                onClick={() => {
+                  if (!drill && c.categoryId && catById.has(c.categoryId)) setDrill(c.categoryId)
+                }}
+                title={!drill && c.categoryId ? "Click to see subcategories" : undefined}
+              >
                 <span className="swatch" style={{ background: colorOf(c.categoryId) }} />
                 <span style={{ width: 150 }}>{labelOf(c.categoryId)}</span>
                 <span style={{ width: 64, textAlign: "right" }}>{fmtDur(c.seconds)}</span>
@@ -144,6 +192,7 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
             </span>
           }
           categories={data.categories}
+          subcategories={data.subcategories}
           current={pickerVideo.categoryOverride}
           channel={pickerVideo.channel || undefined}
           onChoose={async (choice) => {

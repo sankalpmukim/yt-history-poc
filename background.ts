@@ -18,7 +18,7 @@
 
 import mainWorldUrl from "url:./contents/history-main"
 import { APP_VERSION } from "./core/version"
-import { chromeKV, readVideos, readDurationQueue, readCategories, readEventShards } from "./core/storage"
+import { chromeKV, readVideos, readDurationQueue, readCategories, readSubcategories, readEventShards } from "./core/storage"
 import type { KV } from "./core/storage"
 import { ensureInitialized, applySyncResult, noteStatus, runRulesPass } from "./core/ledger"
 import { pruneNow } from "./core/retention"
@@ -261,16 +261,18 @@ async function refreshBudgetStatus(): Promise<void> {
   try {
     const meta = (await kv.get(KEYS.meta)) as MetaState | null
     const budgets = meta?.settings?.budgetsWeekly ?? {}
-    const [videos, shards, categories] = await Promise.all([
+    const [videos, shards, categories, subcategories] = await Promise.all([
       readVideos(kv),
       readEventShards(kv),
-      readCategories(kv)
+      readCategories(kv),
+      readSubcategories(kv)
     ])
     const events = Object.values(shards).flatMap((shard) => Object.values(shard))
     const status = computeBudgetStatus({
       videos,
       events,
       categories,
+      subcategories,
       budgetsWeekly: budgets,
       now: new Date()
     })
@@ -435,7 +437,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (!devRelay) {
     // budget status still needs refreshing even when the relay is off
     for (const key of Object.keys(changes)) {
-      if (key === KEYS.meta || key === KEYS.videos || key === KEYS.rules || key === KEYS.categories || isEventsKey(key)) {
+      if (key === KEYS.meta || key === KEYS.videos || key === KEYS.rules || key === KEYS.categories || key === KEYS.subcategories || isEventsKey(key)) {
         scheduleBudgetRefresh()
         break
       }

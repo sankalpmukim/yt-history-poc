@@ -23,16 +23,12 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pickerFor, setPickerFor] = useState<string | null>(null)
 
-  const catById = useMemo(
-    () => new Map(data.categories.map((c) => [c.id, c] as const)),
-    [data.categories]
-  )
-
   const rows = useMemo(() => {
     const agg = aggregateRange({
       videos: data.videos,
       events: data.events,
       categories: data.categories,
+      subcategories: data.subcategories,
       from: rangeFromDate(range)
     })
     const q = query.trim().toLowerCase()
@@ -115,9 +111,17 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
               choose category…
             </option>
             {data.categories.filter((c) => !c.archivedAt).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.emoji} {c.name}
-              </option>
+              <optgroup key={c.id} label={`${c.emoji} ${c.name}`}>
+                <option value={c.id}>{c.name} (parent)</option>
+                {data.subcategories
+                  .filter((s) => s.parentId === c.id && !s.archivedAt)
+                  .sort((a, b) => a.order - b.order)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {c.name} › {s.name}
+                    </option>
+                  ))}
+              </optgroup>
             ))}
           </select>
           <button
@@ -180,7 +184,8 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
                     <LedgerRowView
                       key={r.event.key}
                       row={r}
-                      category={r.categoryId ? catById.get(r.categoryId) : undefined}
+                      categories={data.categories}
+                      subcategories={data.subcategories}
                       checked={selected.has(r.video.videoId)}
                       onToggle={() => toggle(r.video.videoId)}
                       onPickCategory={() => setPickerFor(r.video.videoId)}
@@ -202,6 +207,7 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
             </span>
           }
           categories={data.categories}
+          subcategories={data.subcategories}
           current={pickerVideo.categoryOverride}
           channel={pickerVideo.channel || undefined}
           onChoose={async (choice) => {
@@ -222,13 +228,15 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
 
 function LedgerRowView({
   row,
-  category,
+  categories,
+  subcategories,
   checked,
   onToggle,
   onPickCategory
 }: {
   row: LedgerRow
-  category: ReturnType<Map<string, import("../../core/types").Category>["get"]>
+  categories: import("../../core/types").Category[]
+  subcategories: import("../../core/types").Subcategory[]
   checked: boolean
   onToggle: () => void
   onPickCategory: () => void
@@ -240,7 +248,12 @@ function LedgerRowView({
         <input type="checkbox" checked={checked} onChange={onToggle} />
       </td>
       <td>
-        <CategoryChip category={category} onClick={onPickCategory} />
+        <CategoryChip
+          targetId={row.targetId}
+          categories={categories}
+          subcategories={subcategories}
+          onClick={onPickCategory}
+        />
       </td>
       <td style={{ maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         <a href={v.url} target="_blank" rel="noreferrer" title={v.title}>

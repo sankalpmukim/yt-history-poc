@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { classifyForBudget, isCategoryOverBudget } from "./classify"
+import { classifyForBudget, isCategoryOverBudget, isTargetOverBudget } from "./classify"
+import { DEFAULT_CATEGORIES, DEFAULT_SUBCATEGORIES } from "./defaults"
 import { compileRules } from "./rules"
 import type { Rule, VideoRecord } from "./types"
 
@@ -121,4 +122,17 @@ test("isCategoryOverBudget fails open for unknown", () => {
   assert.equal(isCategoryOverBudget("brain-rot", over), true)
   assert.equal(isCategoryOverBudget("fun", over), false)
   assert.equal(isCategoryOverBudget(null, over), false)
+})
+
+test("isTargetOverBudget rolls a subcategory up to its parent", () => {
+  const over = new Set(["practical"])
+  assert.equal(
+    isTargetOverBudget("practical-coding", over, DEFAULT_CATEGORIES, DEFAULT_SUBCATEGORIES),
+    true
+  )
+  assert.equal(
+    isTargetOverBudget("deep-lectures", over, DEFAULT_CATEGORIES, DEFAULT_SUBCATEGORIES),
+    false
+  )
+  assert.equal(isTargetOverBudget(null, over, DEFAULT_CATEGORIES, DEFAULT_SUBCATEGORIES), false)
 })

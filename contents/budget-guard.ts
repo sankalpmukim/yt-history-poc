@@ -12,12 +12,13 @@
  */
 
 import type { PlasmoCSConfig } from "plasmo"
-import type { Category, Rule, Settings, VideoRecord } from "../core/types"
+import type { Category, Rule, Settings, Subcategory, VideoRecord } from "../core/types"
 import { KEYS } from "../core/types"
 import { defaultSettings } from "../core/defaults"
 import { compileRules } from "../core/rules"
 import type { CompiledRule } from "../core/rules"
-import { classifyForBudget, isCategoryOverBudget } from "../core/classify"
+import { classifyForBudget, isTargetOverBudget } from "../core/classify"
+import { validTargetIds, topLevelCategoryId } from "../core/taxonomy"
 import { parseDurationText } from "../core/duration"
 import type { BudgetStatus } from "../core/budget"
 import { overBudgetCategories } from "../core/budget"
@@ -51,7 +52,9 @@ interface GuardState {
   mode: Settings["budgetMode"]
   videos: Record<string, VideoRecord>
   compiled: CompiledRule[]
-  categories: Map<string, Category>
+  categories: Category[]
+  subcategories: Subcategory[]
+  categoryById: Map<string, Category>
   over: Set<string>
   overDelta: Map<string, number>
   /** videoId → last classification */
@@ -64,7 +67,9 @@ const state: GuardState = {
   mode: "off",
   videos: {},
   compiled: [],
-  categories: new Map(),
+  categories: [],
+  subcategories: [],
+  categoryById: new Map(),
   over: new Set(),
   overDelta: new Map(),
   cache: new Map(),
@@ -94,6 +99,7 @@ async function loadState(): Promise<void> {
     KEYS.videos,
     KEYS.rules,
     KEYS.categories,
+    KEYS.subcategories,
     KEYS.budgetStatus
   ])) as Record<string, unknown>
   const settings = ((bag[KEYS.meta] as { settings?: Settings } | undefined)?.settings ??
@@ -103,10 +109,14 @@ async function loadState(): Promise<void> {
   const categories = Array.isArray(bag[KEYS.categories])
     ? (bag[KEYS.categories] as Category[])
     : []
-  state.categories = new Map(categories.map((c) => [c.id, c]))
+  const subcategories = Array.isArray(bag[KEYS.subcategories])
+    ? (bag[KEYS.subcategories] as Subcategory[])
+    : []
+  state.categories = categories
+  state.subcategories = subcategories
+  state.categoryById = new Map(categories.map((c) => [c.id, c]))
   const rules = Array.isArray(bag[KEYS.rules]) ? (bag[KEYS.rules] as Rule[]) : []
-  const liveIds = new Set(categories.filter((c) => !c.archivedAt).map((c) => c.id))
-  state.compiled = compileRules(rules, liveIds)
+  state.compiled = compileRules(rules, validTargetIds(categories, subcategories))
   const status = bag[KEYS.budgetStatus] as BudgetStatus | undefined
   state.over = overBudgetCategories(status)
   state.overDelta = new Map((status?.entries ?? []).map((e) => [e.categoryId, e.deltaSec]))
@@ -215,11 +225,13 @@ function classifyCard(el: Element, videoId: string): string | null {
 }
 
 function catName(id: string): string {
-  return state.categories.get(id)?.name ?? id
+  const top = topLevelCategoryId(id, state.categories, state.subcategories) ?? id
+  return state.categoryById.get(top)?.name ?? top
 }
 
 function overageMinutes(id: string): number {
-  const delta = state.overDelta.get(id) ?? 0
+  const top = topLevelCategoryId(id, state.categories, state.subcategories) ?? id
+  const delta = state.overDelta.get(top) ?? 0
   return Math.max(1, Math.round(delta / 60))
 }
 
@@ -343,7 +355,7 @@ function applyCard(card: Element): void {
     return
   }
   const cat = classifyCard(card, videoId)
-  const over = isCategoryOverBudget(cat, state.over)
+  const over = isTargetOverBudget(cat, state.over, state.categories, state.subcategories)
   const prev = card.getAttribute("data-yl-budget")
   if (!over) {
     if (prev) unapplyCard(card)
@@ -422,7 +434,8 @@ function scanWatch(): void {
     state.compiled
   )
   state.cache.set(id, cat)
-  if (isCategoryOverBudget(cat, state.over) && cat) showWatchUi(id, cat)
+  if (isTargetOverBudget(cat, state.over, state.categories, state.subcategories) && cat)
+    showWatchUi(id, cat)
   else removeWatchUi()
 }
 
@@ -491,6 +504,7 @@ try {
           k === KEYS.videos ||
           k === KEYS.rules ||
           k === KEYS.categories ||
+          k === KEYS.subcategories ||
           k === KEYS.budgetStatus
       )
     ) {

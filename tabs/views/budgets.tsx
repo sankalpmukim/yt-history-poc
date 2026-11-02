@@ -25,6 +25,7 @@ export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => 
       videos: data.videos,
       events: data.events,
       categories: data.categories,
+      subcategories: data.subcategories,
       budgetsWeekly: settings.budgetsWeekly,
       now: new Date()
     })

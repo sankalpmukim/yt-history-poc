@@ -119,3 +119,33 @@ test("uncategorizedVideos lists recent uncategorized videos seen in events", () 
   const list = uncategorizedVideos({ videos, events: [event("a", "2026-11-01"), event("b", "2026-11-01"), event("c", "2026-11-01")] })
   assert.deepEqual(list.map((v) => v.videoId), ["a"])
 })
+
+test("subcategory assignments roll up to the parent; drilldown groups by sub", () => {
+  const subs = [
+    { id: "deep-lectures", parentId: "deep", name: "Lectures", emoji: "📚", order: 0 },
+    { id: "deep-docs", parentId: "deep", name: "Docs", emoji: "🎬", order: 1 }
+  ]
+  const videos = {
+    a: video("a", { autoCategoryId: "deep-lectures" }),
+    b: video("b", { autoCategoryId: "deep-docs" }),
+    c: video("c", { autoCategoryId: "deep" }), // parent only
+    d: video("d", { autoCategoryId: "fun" })
+  }
+  const events = ["a", "b", "c", "d"].map((id) => event(id, "2026-11-01"))
+  const top = aggregateRange({ videos, events, categories: CATS, subcategories: subs })
+  const deep = top.byCategory.find((c) => c.categoryId === "deep")!
+  assert.equal(deep.seconds, 1800, "three deep videos roll up")
+  assert.equal(deep.videoCount, 3)
+
+  const drilled = aggregateRange({
+    videos,
+    events,
+    categories: CATS,
+    subcategories: subs,
+    drilldownParentId: "deep"
+  })
+  assert.equal(drilled.totalEvents, 3)
+  assert.ok(drilled.byCategory.find((c) => c.categoryId === "deep-lectures"))
+  assert.ok(drilled.byCategory.find((c) => c.categoryId === "deep-docs"))
+  assert.ok(drilled.byCategory.find((c) => c.categoryId === "deep"), "parent-only bucket")
+})

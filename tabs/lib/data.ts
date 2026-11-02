@@ -4,7 +4,7 @@
  * chrome.storage is directly available.
  */
 
-import type { Category, MetaState, Rule, VideoRecord, WatchEvent } from "../../core/types"
+import type { Category, MetaState, Rule, Subcategory, VideoRecord, WatchEvent } from "../../core/types"
 import { KEYS, isEventsKey } from "../../core/types"
 import type { Settings } from "../../core/types"
 import { defaultSettings } from "../../core/defaults"
@@ -13,6 +13,7 @@ import type { BudgetStatus } from "../../core/budget"
 export interface LedgerData {
   meta: MetaState | null
   categories: Category[]
+  subcategories: Subcategory[]
   rules: Rule[]
   videos: Record<string, VideoRecord>
   events: WatchEvent[]
@@ -24,6 +25,9 @@ export async function loadLedgerData(): Promise<LedgerData> {
   const meta = (all[KEYS.meta] as MetaState) ?? null
   const categories = Array.isArray(all[KEYS.categories])
     ? (all[KEYS.categories] as Category[])
+    : []
+  const subcategories = Array.isArray(all[KEYS.subcategories])
+    ? (all[KEYS.subcategories] as Subcategory[])
     : []
   const rules = Array.isArray(all[KEYS.rules]) ? (all[KEYS.rules] as Rule[]) : []
   const videos =
@@ -38,7 +42,7 @@ export async function loadLedgerData(): Promise<LedgerData> {
     (a, b) => b.watchedOn.localeCompare(a.watchedOn) || b.lastSeenAt.localeCompare(a.lastSeenAt)
   )
   const budgetStatus = (all[KEYS.budgetStatus] as BudgetStatus) ?? null
-  return { meta, categories, rules, videos, events, budgetStatus }
+  return { meta, categories, subcategories, rules, videos, events, budgetStatus }
 }
 
 export function settingsOf(data: LedgerData): Settings {
@@ -74,4 +78,8 @@ export async function writeCategories(categories: Category[]): Promise<void> {
 
 export async function writeRules(rules: Rule[]): Promise<void> {
   await chrome.storage.local.set({ [KEYS.rules]: rules })
+}
+
+export async function writeSubcategories(subcategories: Subcategory[]): Promise<void> {
+  await chrome.storage.local.set({ [KEYS.subcategories]: subcategories })
 }

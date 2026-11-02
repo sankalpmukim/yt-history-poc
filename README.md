@@ -5,6 +5,13 @@ YouTube watch history (watch events = transactions, categories = spending
 categories, value scores = the inverse of cost, budgets = time budgets).
 See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
 
+**Status: subcategories (0.8.0)** — expense-manager-style children under each
+top-level category. Videos/rules assign to a sub or the parent; chips and
+pickers show `Parent › Sub`; Overview charts are top-level with click-to-drill
+into subs; budgets still roll up to the parent. Existing category-level
+assignments keep working; installs that predate this key get default subs
+seeded once.
+
 **Status: M8 complete** — everything in M7 plus **on-YouTube budget
 enforcement** (`contents/budget-guard.ts`): Off (default, zero DOM changes),
 Gentle (red outline + "over budget · category" chip on feed items; dismissible

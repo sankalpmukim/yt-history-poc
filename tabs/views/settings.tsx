@@ -40,6 +40,7 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
     const backup = buildBackup({
       meta: fresh.meta,
       categories: fresh.categories,
+      subcategories: fresh.subcategories,
       rules: fresh.rules,
       videos: fresh.videos,
       events: fresh.events,
@@ -57,7 +58,8 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
     const csv = buildCsv({
       videos: fresh.videos,
       events: fresh.events,
-      categories: fresh.categories
+      categories: fresh.categories,
+      subcategories: fresh.subcategories
     })
     download(
       `yt-ledger-ledger-${new Date().toISOString().slice(0, 10)}.csv`,
@@ -75,6 +77,7 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
       const writes: Record<string, unknown> = {
         [KEYS.meta]: backup.data.meta,
         [KEYS.categories]: backup.data.categories,
+        [KEYS.subcategories]: backup.data.subcategories ?? [],
         [KEYS.rules]: backup.data.rules,
         [KEYS.videos]: backup.data.videos
       }

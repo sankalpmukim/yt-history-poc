@@ -4,8 +4,8 @@ import { useMemo, useState } from "react"
 import type { LedgerData } from "../lib/data"
 import { writeRules } from "../lib/data"
 import type { Rule, RuleMatch } from "../../core/types"
-import { KEYS } from "../../core/types"
-import { compileRules, previewMatches, describeMatch, targetOfVideo } from "../../core/rules"
+import { compileRules, previewMatches, describeMatch } from "../../core/rules"
+import { validTargetIds } from "../../core/taxonomy"
 import { runRulesPass } from "../../core/ledger"
 import { ChromeKV } from "../../core/storage"
 import { CategoryChip } from "../lib/ui"
@@ -35,7 +35,10 @@ export function RulesView({ data, reload }: { data: LedgerData; reload: () => Pr
     () => [...data.rules].sort((a, b) => a.priority - b.priority),
     [data.rules]
   )
-  const catById = useMemo(() => new Map(data.categories.map((c) => [c.id, c] as const)), [data.categories])
+  const liveTargets = useMemo(
+    () => validTargetIds(data.categories, data.subcategories),
+    [data.categories, data.subcategories]
+  )
 
   const save = async (rule: Rule) => {
     const exists = data.rules.some((r) => r.id === rule.id)
@@ -95,9 +98,7 @@ export function RulesView({ data, reload }: { data: LedgerData; reload: () => Pr
           <div className="empty">No rules yet — create one, or use the Ledger’s “always for this channel”.</div>
         ) : (
           rules.map((r, i) => {
-            const cat = catById.get(r.categoryId)
-            const dead = r.categoryId && !catById.get(r.categoryId)
-            const archived = cat?.archivedAt != null
+            const dead = r.categoryId && !liveTargets.has(r.categoryId)
             return (
               <div key={r.id} className="queueitem" style={{ flexWrap: "wrap" }}>
                 <input type="checkbox" checked={r.enabled} onChange={() => void toggle(r)} title="enabled" />
@@ -107,13 +108,17 @@ export function RulesView({ data, reload }: { data: LedgerData; reload: () => Pr
                 <div style={{ minWidth: 220, flex: 1 }}>
                   <div>{r.name || <span className="muted">(unnamed)</span>}</div>
                   <div className="muted small">{describeMatch(r.match)}</div>
-                  {dead ? <div className="small" style={{ color: "var(--danger)" }}>target category no longer exists — skipped</div> : null}
-                  {!dead && archived ? <div className="small" style={{ color: "var(--warn)" }}>target category archived — skipped</div> : null}
+                  {dead ? <div className="small" style={{ color: "var(--danger)" }}>target no longer exists — skipped</div> : null}
                 </div>
                 <span className="muted small" title="videos currently assigned by this rule">
                   {r.hitCount} video(s)
                 </span>
-                <CategoryChip category={cat} onClick={() => setEditing(r)} />
+                <CategoryChip
+                  targetId={r.categoryId}
+                  categories={data.categories}
+                  subcategories={data.subcategories}
+                  onClick={() => setEditing(r)}
+                />
                 <span className="row">
                   <button className="btn btn-sm" disabled={i === 0} onClick={() => void move(r, -1)}>
                     ↑
@@ -183,7 +188,7 @@ function RuleEditor({
       setRegexError(String(e?.message ?? e))
       return
     }
-    const compiled = compileRules([draft], new Set(data.categories.map((c) => c.id)))
+    const compiled = compileRules([draft], validTargetIds(data.categories, data.subcategories))
     if (compiled.length === 0) {
       setRegexError("rule is unusable (bad regex, disabled, or unknown category)")
       return
@@ -211,7 +216,17 @@ function RuleEditor({
               onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}>
               <option value="" disabled>choose…</option>
               {data.categories.filter((c) => !c.archivedAt).map((c) => (
-                <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+                <optgroup key={c.id} label={`${c.emoji} ${c.name}`}>
+                  <option value={c.id}>{c.name} (parent)</option>
+                  {data.subcategories
+                    .filter((s) => s.parentId === c.id && !s.archivedAt)
+                    .sort((a, b) => a.order - b.order)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {c.name} › {s.name}
+                      </option>
+                    ))}
+                </optgroup>
               ))}
             </select>
           </label>

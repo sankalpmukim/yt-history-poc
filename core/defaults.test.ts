@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { DEFAULT_CATEGORIES, fallbackStarterRules, defaultSettings } from "./defaults"
+import { DEFAULT_CATEGORIES, DEFAULT_SUBCATEGORIES, fallbackStarterRules, defaultSettings } from "./defaults"
+import { validTargetIds } from "./taxonomy"
 
 test("default categories: unique ids, ordered ladder, sane scores", () => {
   const ids = DEFAULT_CATEGORIES.map((c) => c.id)
@@ -20,12 +21,12 @@ test("default categories: unique ids, ordered ladder, sane scores", () => {
   )
 })
 
-test("fallback starter rules reference existing categories", () => {
-  const catIds = new Set(DEFAULT_CATEGORIES.map((c) => c.id))
+test("fallback starter rules reference live category or subcategory targets", () => {
+  const ids = validTargetIds(DEFAULT_CATEGORIES, DEFAULT_SUBCATEGORIES)
   const rules = fallbackStarterRules(new Date().toISOString())
   assert.ok(rules.length >= 2 && rules.length <= 3, "small, non-irritating set")
   for (const r of rules) {
-    assert.ok(catIds.has(r.categoryId), `rule ${r.id} → known category`)
+    assert.ok(ids.has(r.categoryId), `rule ${r.id} → known target ${r.categoryId}`)
     assert.ok(r.enabled !== undefined)
   }
 })
