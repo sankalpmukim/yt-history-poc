@@ -8,6 +8,7 @@ import type { Category, MetaState, Rule, VideoRecord, WatchEvent } from "../../c
 import { KEYS, isEventsKey } from "../../core/types"
 import type { Settings } from "../../core/types"
 import { defaultSettings } from "../../core/defaults"
+import type { BudgetStatus } from "../../core/budget"
 
 export interface LedgerData {
   meta: MetaState | null
@@ -15,6 +16,7 @@ export interface LedgerData {
   rules: Rule[]
   videos: Record<string, VideoRecord>
   events: WatchEvent[]
+  budgetStatus: BudgetStatus | null
 }
 
 export async function loadLedgerData(): Promise<LedgerData> {
@@ -35,7 +37,8 @@ export async function loadLedgerData(): Promise<LedgerData> {
   events.sort(
     (a, b) => b.watchedOn.localeCompare(a.watchedOn) || b.lastSeenAt.localeCompare(a.lastSeenAt)
   )
-  return { meta, categories, rules, videos, events }
+  const budgetStatus = (all[KEYS.budgetStatus] as BudgetStatus) ?? null
+  return { meta, categories, rules, videos, events, budgetStatus }
 }
 
 export function settingsOf(data: LedgerData): Settings {

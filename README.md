@@ -5,6 +5,13 @@ YouTube watch history (watch events = transactions, categories = spending
 categories, value scores = the inverse of cost, budgets = time budgets).
 See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
 
+**Status: M7 complete** — everything in M6 plus **weekly budgets**: per-category
+hours/week in the Budgets tab, spent-vs-budget bars (over/under, week runs
+Monday 00:00 local), enforcement-mode picker (off/gentle/strict — enforcement
+itself is M8), and a `yl.v2.budgetStatus` snapshot the service worker
+refreshes on every relevant storage change so the on-YouTube guard never
+re-aggregates events.
+
 **Status: M6 complete** — everything in M5 plus the **onboarding wizard**
 (first dashboard open: privacy intro → category-ladder pass with live
 renames/re-scores → starter-rules selection with live match counts and a

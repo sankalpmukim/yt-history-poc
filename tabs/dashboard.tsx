@@ -14,7 +14,7 @@ import { CategoriesView } from "./views/categories"
 import { SettingsView } from "./views/settings"
 import { InsightsView } from "./views/insights"
 import { OnboardingView } from "./views/onboarding"
-import { PlaceholderView } from "./views/placeholder"
+import { BudgetsView } from "./views/budgets"
 
 interface RouteDef {
   id: string
@@ -28,11 +28,7 @@ const ROUTES: RouteDef[] = [
   { id: "rules", label: "⚖️ Rules", el: (p) => <RulesView {...p} /> },
   { id: "categories", label: "🏷️ Categories", el: (p) => <CategoriesView {...p} /> },
   { id: "insights", label: "🔍 Insights", el: (p) => <InsightsView {...p} /> },
-  {
-    id: "budgets",
-    label: "⏱️ Budgets",
-    el: () => <PlaceholderView title="Budgets" note="Budgets land in M7." />
-  },
+  { id: "budgets", label: "⏱️ Budgets", el: (p) => <BudgetsView {...p} /> },
   { id: "settings", label: "⚙️ Settings", el: (p) => <SettingsView {...p} /> }
 ]
 

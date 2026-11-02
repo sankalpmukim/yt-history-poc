@@ -18,12 +18,14 @@
 
 import mainWorldUrl from "url:./contents/history-main"
 import { APP_VERSION } from "./core/version"
-import { chromeKV, readVideos, readDurationQueue } from "./core/storage"
+import { chromeKV, readVideos, readDurationQueue, readCategories, readEventShards } from "./core/storage"
 import type { KV } from "./core/storage"
 import { ensureInitialized, applySyncResult, noteStatus, runRulesPass } from "./core/ledger"
 import { pruneNow } from "./core/retention"
 import { resolveDurations } from "./core/resolve"
-import { KEYS } from "./core/types"
+import { computeBudgetStatus } from "./core/budget"
+import { KEYS, isEventsKey } from "./core/types"
+import type { MetaState } from "./core/types"
 
 const kv: KV = chromeKV()
 
@@ -244,6 +246,50 @@ async function runDurationResolver(): Promise<void> {
 }
 
 /* ------------------------------------------------------------------ */
+/* budget status snapshot (M7)                                         */
+/* ------------------------------------------------------------------ */
+
+let budgetTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Materialize yl.v2.budgetStatus so the on-YouTube guard (M8) reads one
+ * small key instead of aggregating events. Recomputed (debounced) whenever
+ * any of the underlying keys change — but never triggered by its own
+ * writes, and skipped entirely when nothing actually changed.
+ */
+async function refreshBudgetStatus(): Promise<void> {
+  try {
+    const meta = (await kv.get(KEYS.meta)) as MetaState | null
+    const budgets = meta?.settings?.budgetsWeekly ?? {}
+    const [videos, shards, categories] = await Promise.all([
+      readVideos(kv),
+      readEventShards(kv),
+      readCategories(kv)
+    ])
+    const events = Object.values(shards).flatMap((shard) => Object.values(shard))
+    const status = computeBudgetStatus({
+      videos,
+      events,
+      categories,
+      budgetsWeekly: budgets,
+      now: new Date()
+    })
+    const next = JSON.stringify(status)
+    const prev = await kv.get(KEYS.budgetStatus)
+    if (JSON.stringify(prev ?? null) !== next) {
+      await kv.set({ [KEYS.budgetStatus]: status })
+    }
+  } catch (e) {
+    console.error("[yt-ledger] budget status refresh failed:", e)
+  }
+}
+
+function scheduleBudgetRefresh(): void {
+  if (budgetTimer != null) clearTimeout(budgetTimer)
+  budgetTimer = setTimeout(() => void refreshBudgetStatus(), 1500)
+}
+
+/* ------------------------------------------------------------------ */
 /* messages                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -271,6 +317,12 @@ chrome.runtime.onMessage.addListener((msg: any, sender, sendResponse) => {
 
   if (msg?.type === "yl.hiddenTabDone") {
     if (tabId != null && tabId === hiddenTabId) closeHiddenTab("done")
+    sendResponse({ ok: true })
+    return false
+  }
+
+  if (msg?.type === "yl.refreshBudget") {
+    void refreshBudgetStatus()
     sendResponse({ ok: true })
     return false
   }
@@ -327,6 +379,7 @@ async function onLifecycle(event: string): Promise<void> {
     await refreshDevRelay()
     ping("sw-lifecycle", `${event} pruned=${pruned.removedEvents}`)
     void runDurationResolver()
+    void refreshBudgetStatus()
   } catch (e) {
     console.error("[yt-ledger] lifecycle init failed:", e)
   }
@@ -379,8 +432,20 @@ void (async () => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return
   if (changes[KEYS.meta]) void refreshDevRelay()
-  if (!devRelay) return
+  if (!devRelay) {
+    // budget status still needs refreshing even when the relay is off
+    for (const key of Object.keys(changes)) {
+      if (key === KEYS.meta || key === KEYS.videos || key === KEYS.rules || key === KEYS.categories || isEventsKey(key)) {
+        scheduleBudgetRefresh()
+        break
+      }
+    }
+    return
+  }
   for (const key of Object.keys(changes)) {
+    if (key === KEYS.meta || key === KEYS.videos || key === KEYS.rules || key === KEYS.categories || isEventsKey(key)) {
+      scheduleBudgetRefresh()
+    }
     if (key.startsWith("yl.") || key.startsWith("ytHistoryPoc")) {
       ping("storage-relay", `key=${key} -> ${JSON.stringify(changes[key].newValue).slice(0, 15500)}`)
     }
