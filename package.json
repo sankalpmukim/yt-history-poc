@@ -1,0 +1,26 @@
+{
+  "name": "yt-history-poc",
+  "displayName": "YT History POC",
+  "version": "0.1.0",
+  "description": "POC: reads your own YouTube watch history (last 2 days) via the page's innertube API and caches it locally.",
+  "private": true,
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "package": "plasmo package"
+  },
+  "dependencies": {
+    "plasmo": "0.90.5"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.3.7",
+    "typescript": "^5.5.0"
+  },
+  "manifest": {
+    "permissions": ["storage"],
+    "host_permissions": ["*://*.youtube.com/*", "http://127.0.0.1:8742/*"]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "lmdb", "msgpackr-extract", "core"]
+  }
+}
