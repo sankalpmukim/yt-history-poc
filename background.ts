@@ -155,6 +155,33 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 })
 
 /* ------------------------------------------------------------------ */
+/* toolbar click → dashboard tab                                       */
+/* ------------------------------------------------------------------ */
+
+async function openDashboard(): Promise<void> {
+  const url = chrome.runtime.getURL("tabs/dashboard.html")
+  try {
+    const tabs = await chrome.tabs.query({ url })
+    if (tabs.length > 0 && tabs[0].id != null) {
+      await chrome.tabs.update(tabs[0].id, { active: true })
+      if (tabs[0].windowId != null) {
+        try {
+          await chrome.windows.update(tabs[0].windowId, { focused: true })
+        } catch {}
+      }
+      return
+    }
+  } catch {}
+  try {
+    await chrome.tabs.create({ url })
+  } catch (e) {
+    console.error("[yt-ledger] failed to open dashboard:", e)
+  }
+}
+
+chrome.action.onClicked.addListener(() => void openDashboard())
+
+/* ------------------------------------------------------------------ */
 /* duration resolver glue (M2)                                         */
 /* ------------------------------------------------------------------ */
 

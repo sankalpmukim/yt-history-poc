@@ -5,6 +5,19 @@ YouTube watch history (watch events = transactions, categories = spending
 categories, value scores = the inverse of cost, budgets = time budgets).
 See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
 
+**Status: M4 complete** — the **dashboard** is live: click the YT Ledger
+toolbar icon to open it (a full tab; no popup — see the known Plasmo/Node-26
+popup bug). It ships **Overview** (range picker Today/7/30/90/All; stat
+cards for est. watch time, avg/day, time value index, low-value share,
+events, uncategorized time; daily stacked-bar trend by category; category
+donut + ranked list with share bars and top channels; review queue for
+uncategorized videos with inline categorize + one-click channel rules) and
+the **Ledger** (the transactions view: watch events grouped by day, search /
+category filters, per-row category chips with an "always for this channel"
+option, occurrence counts, estimate-confidence dots, multi-select bulk
+assign / clear overrides). Hand-rolled SVG charts — zero new runtime deps
+beyond react/react-dom.
+
 **Status: M3 complete** — everything in M2 plus the **rules engine**: videos
 are auto-categorized on every sync (and re-tried whenever the duration
 resolver discovers new duration/isShort evidence) using priority-ordered,
