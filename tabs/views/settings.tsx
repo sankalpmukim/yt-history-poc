@@ -179,7 +179,7 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
         <h2>YouTube integration</h2>
         <div className="row" style={{ marginBottom: 8 }}>
           <label className="small">
-            Budget enforcement (M8)
+            Budget enforcement
             <select
               value={settings.budgetMode}
               onChange={(e) => void patchSettings({ budgetMode: e.target.value as "off" | "gentle" | "strict" })}
@@ -190,7 +190,7 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
             </select>
           </label>
         </div>
-        <div className="muted small">Configure budgets in the Budgets tab. Enforcement on YouTube pages ships in M8.</div>
+        <div className="muted small">Configure hours/week in the Budgets tab. Off (default) never touches YouTube; Gentle highlights; Strict blurs/hides. Unknown videos are never blocked.</div>
       </div>
 
       <div className="card">

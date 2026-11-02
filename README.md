@@ -5,12 +5,20 @@ YouTube watch history (watch events = transactions, categories = spending
 categories, value scores = the inverse of cost, budgets = time budgets).
 See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
 
+**Status: M8 complete** — everything in M7 plus **on-YouTube budget
+enforcement** (`contents/budget-guard.ts`): Off (default, zero DOM changes),
+Gentle (red outline + "over budget · category" chip on feed items; dismissible
+banner on watch/Shorts pages), Strict (blur thumbnail+title, click-to-reveal
+placeholder, dismissible "Watch anyway" interstitial). Classification uses
+stored overrides, then stored auto-category, then live rules on the visible
+title/channel; unknown videos fail open. One CSS class (`yl-budget-guard`)
+strips all injected UI. Debounced MutationObserver + per-videoId cache.
+
 **Status: M7 complete** — everything in M6 plus **weekly budgets**: per-category
 hours/week in the Budgets tab, spent-vs-budget bars (over/under, week runs
-Monday 00:00 local), enforcement-mode picker (off/gentle/strict — enforcement
-itself is M8), and a `yl.v2.budgetStatus` snapshot the service worker
-refreshes on every relevant storage change so the on-YouTube guard never
-re-aggregates events.
+Monday 00:00 local), enforcement-mode picker (off/gentle/strict), and a
+`yl.v2.budgetStatus` snapshot the service worker refreshes on every relevant
+storage change so the on-YouTube guard never re-aggregates events.
 
 **Status: M6 complete** — everything in M5 plus the **onboarding wizard**
 (first dashboard open: privacy intro → category-ladder pass with live
@@ -188,9 +196,12 @@ pnpm build          # → build/chrome-mv3-prod
 
 ## Verification shortcuts
 
-- Unit tests for the core logic: `pnpm test` (merge/migrate/estimate/
-  retention/duration/resolve/rules/ledger — 62 tests, node + esbuild, no
-  browser needed).
+- Unit tests for the core logic: `pnpm test` (87 tests, node + esbuild).
+- Budget enforcement: toolbar → dashboard → Budgets. Set hours/week on a
+  category you overspend, pick Gentle then Strict. On youtube.com home,
+  over-budget cards get a red outline (Gentle) or a blur + click-to-reveal
+  (Strict); a watch page shows a banner / "Watch anyway" interstitial.
+  Unknown videos are never touched. Off restores stock YouTube.
 - After any sync, inspect auto-categorization in the SW console:
   `chrome.storage.local.get("yl.v2.videos", d => Object.values(d["yl.v2.videos"]).filter(v => v.appliedRuleId))`
   — tutorial/lecture-ish titles should show `appliedRuleId:
