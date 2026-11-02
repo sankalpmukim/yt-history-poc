@@ -5,7 +5,7 @@ import type { LedgerData } from "../lib/data"
 import { patchSettings, settingsOf } from "../lib/data"
 import { refreshBudgetStatusClient } from "../lib/budgetclient"
 import { computeBudgetStatus } from "../../core/budget"
-import { fmtDur, fmtDate } from "../lib/ui"
+import { fmtDur, fmtDate, BudgetModeControl } from "../lib/ui"
 
 export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const settings = settingsOf(data)
@@ -65,15 +65,14 @@ export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => 
 
       <div className="card">
         <h2>Enforcement on YouTube</h2>
-        <div className="row" style={{ marginBottom: 6 }}>
-          <select
+        <div className="row" style={{ marginBottom: 8, alignItems: "flex-start" }}>
+          <BudgetModeControl
             value={settings.budgetMode}
-            onChange={(e) => void patchSettings({ budgetMode: e.target.value as "off" | "gentle" | "strict" })}
-          >
-            <option value="off">Off — track only</option>
-            <option value="gentle">Gentle — highlight over-budget videos</option>
-            <option value="strict">Strict — blur/hide over-budget videos</option>
-          </select>
+            onChange={(mode) => void patchSettings({ budgetMode: mode })}
+          />
+          <span className="small" role="status" aria-live="polite" style={{ alignSelf: "center" }}>
+            Current mode: <b>{settings.budgetMode}</b>
+          </span>
         </div>
         <div className="muted small">
           Gentle adds a red border + “over budget” chip on over-budget videos in feeds; Strict

@@ -52,7 +52,8 @@ export function CategoriesView({ data, reload }: { data: LedgerData; reload: () 
     const nowIso = new Date().toISOString()
     let id = slugId("New category")
     let n = 2
-    while (categories.some((c) => c.id === id)) id = slugId(`New category ${n++}`)
+    while (categories.some((c) => c.id === id) || subs.some((s) => s.id === id))
+      id = slugId(`New category ${n++}`)
     await persist([
       ...categories,
       { id, name: "New category", emoji: "🏷️", color: "#60a5fa", valueScore: 2, order: categories.length }

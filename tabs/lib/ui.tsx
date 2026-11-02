@@ -1,7 +1,7 @@
 /** Shared UI atoms for the dashboard. */
 
-import { useEffect, useState, type ReactNode } from "react"
-import type { Category, Subcategory } from "../../core/types"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import type { BudgetMode, Category, Subcategory } from "../../core/types"
 import { chipLabelForTarget } from "../../core/taxonomy"
 
 export function fmtDur(seconds: number | null | undefined): string {
@@ -224,6 +224,93 @@ export function RangeBar({
           {o.label}
         </button>
       ))}
+    </div>
+  )
+}
+
+/**
+ * Accessible segmented control for the on-YouTube enforcement mode.
+ *
+ * Deliberately NOT a native <select>: QA automation and keyboard users both
+ * failed to operate the previous dropdown reliably. These are real buttons in
+ * a role="radiogroup" with aria-checked, roving tabindex and arrow keys, so
+ * they can be clicked, tabbed to, and switched with Space/Enter.
+ */
+export const BUDGET_MODE_OPTIONS = [
+  { value: "off", label: "Off", hint: "track only" },
+  { value: "gentle", label: "Gentle", hint: "highlight" },
+  { value: "strict", label: "Strict", hint: "blur / hide" }
+] as const
+
+export function BudgetModeControl({
+  value,
+  onChange,
+  compact = false,
+  label = "Budget enforcement mode"
+}: {
+  value: BudgetMode
+  onChange: (mode: BudgetMode) => void
+  /** hide the one-word hint under each label */
+  compact?: boolean
+  label?: string
+}) {
+  const groupRef = useRef<HTMLDivElement | null>(null)
+  const index = BUDGET_MODE_OPTIONS.findIndex((o) => o.value === value)
+
+  const choose = (delta: number) => {
+    const next =
+      (index + delta + BUDGET_MODE_OPTIONS.length) % BUDGET_MODE_OPTIONS.length
+    const mode = BUDGET_MODE_OPTIONS[next].value
+    onChange(mode)
+    const el = groupRef.current?.querySelector<HTMLButtonElement>(
+      `[data-mode="${mode}"]`
+    )
+    el?.focus()
+  }
+
+  return (
+    <div
+      ref={groupRef}
+      className={"segmented" + (compact ? " compact" : "")}
+      role="radiogroup"
+      aria-label={label}
+      data-testid="budget-mode-control"
+      onKeyDown={(e) => {
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault()
+          choose(1)
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault()
+          choose(-1)
+        } else if (e.key === " " || e.key === "Enter") {
+          // Let the focused button's click handler run.
+        }
+      }}
+    >
+      {BUDGET_MODE_OPTIONS.map((o) => {
+        const active = value === o.value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={`${o.label} — ${o.hint}`}
+            data-mode={o.value}
+            tabIndex={active ? 0 : -1}
+            className={"segment" + (active ? " active" : "")}
+            onClick={() => onChange(o.value)}
+          >
+            <span className="segment-mark" aria-hidden="true">
+              {active ? "●" : "○"}
+            </span>
+            <span className="segment-body">
+              <span className="segment-label">{o.label}</span>
+              {compact ? null : <span className="segment-hint">{o.hint}</span>}
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }

@@ -29,6 +29,12 @@ test("ensureInitialized writes defaults exactly once (no v1 present)", async () 
   assert.equal(meta.version, 2)
   assert.equal(meta.settings.retentionDays, 365)
   assert.ok(Array.isArray(await kv.get(KEYS.categories)))
+  assert.ok(Array.isArray(await kv.get(KEYS.subcategories)))
+  assert.ok(
+    ((await kv.get(KEYS.subcategories)) as Array<{ id: string }>).some(
+      (subcategory) => subcategory.id === "practical-coding"
+    )
+  )
   assert.ok(Array.isArray(await kv.get(KEYS.rules)))
   assert.deepEqual(await kv.get(KEYS.videos), {}, "migration marked as considered")
 
@@ -72,6 +78,48 @@ test("v1 POC cache is migrated once on init", async () => {
   // v1 key is left untouched; migration never runs again
   const v1After = (await kv.get("ytHistoryPoc.v1")) as any
   assert.equal(v1After.entries.a.title, "A")
+})
+
+test("existing stores get default subcategories once without changing parent assignments", async () => {
+  const kv = new MemoryKV()
+  const meta = {
+    version: 2,
+    settings: {},
+    lastSyncedAt: null,
+    lastSyncStatus: ""
+  }
+  const parentAssignment = {
+    a: {
+      videoId: "a",
+      title: "Legacy parent assignment",
+      channel: "C",
+      url: "u",
+      durationSec: 30,
+      durationSource: "watch-page",
+      isShort: null,
+      categoryOverride: "practical",
+      autoCategoryId: null,
+      appliedRuleId: null,
+      firstSeenAt: NOW.toISOString(),
+      lastSeenAt: NOW.toISOString()
+    }
+  }
+  await kv.set({
+    [KEYS.meta]: meta,
+    [KEYS.videos]: parentAssignment,
+    [KEYS.categories]: [],
+    [KEYS.rules]: []
+  })
+  await ensureInitialized(kv, NOW)
+  const subs = (await kv.get(KEYS.subcategories)) as Array<{ id: string }>
+  assert.ok(subs.some((subcategory) => subcategory.id === "practical-coding"))
+  const videos = (await kv.get(KEYS.videos)) as typeof parentAssignment
+  assert.equal(videos.a.categoryOverride, "practical", "legacy parent-level target is unchanged")
+  await kv.set({ [KEYS.subcategories]: [{ id: "custom", parentId: "practical", name: "Custom", emoji: "✨", order: 0 }] })
+  await ensureInitialized(kv, NOW)
+  assert.deepEqual(await kv.get(KEYS.subcategories), [
+    { id: "custom", parentId: "practical", name: "Custom", emoji: "✨", order: 0 }
+  ], "existing user taxonomy is never reseeded or overwritten")
 })
 
 test("applySyncResult persists shards, videos, queue and status", async () => {

@@ -59,9 +59,10 @@ export function computeBudgetStatus(params: {
   const weekStart = keyOf(weekStartDate)
   const weekEnd = keyOf(weekEndDate)
 
+  const topLevelIds = new Set(params.categories.map((category) => category.id))
   const budgeted = new Set(
     Object.entries(params.budgetsWeekly)
-      .filter(([, sec]) => typeof sec === "number" && sec > 0)
+      .filter(([id, sec]) => topLevelIds.has(id) && typeof sec === "number" && sec > 0)
       .map(([id]) => id)
   )
   const spent = new Map<string, number>()

@@ -53,9 +53,13 @@ test("describeMatch renders readable condition summaries", () => {
 })
 
 test("backup round-trip: build → validate → shards", () => {
+  const subcategories = [
+    { id: "fun-music", parentId: "fun", name: "Music", emoji: "🎵", order: 0 }
+  ]
   const backup = buildBackup({
     meta: null,
     categories: CATS,
+    subcategories,
     rules: [],
     videos: { a: video("a") },
     events: [event("a", "2026-11-01"), event("a", "2026-10-20")],
@@ -63,9 +67,24 @@ test("backup round-trip: build → validate → shards", () => {
   })
   const parsed = validateBackup(JSON.stringify(backup))
   assert.equal(parsed.app, "yt-ledger")
+  assert.deepEqual(parsed.data.subcategories, subcategories)
   const shards = backupToShards(parsed)
   assert.ok(shards["2026-11"][eventKeyOf("a", "2026-11-01")])
   assert.ok(shards["2026-10"][eventKeyOf("a", "2026-10-20")])
+})
+
+test("legacy backups without subcategories remain importable", () => {
+  const legacy = buildBackup({
+    meta: null,
+    categories: CATS,
+    rules: [],
+    videos: { a: video("a") },
+    events: [event("a", "2026-11-01")],
+    now: NOW
+  })
+  delete (legacy.data as { subcategories?: unknown }).subcategories
+  const parsed = validateBackup(legacy)
+  assert.equal(parsed.data.subcategories, undefined)
 })
 
 test("validateBackup rejects garbage and foreign payloads", () => {
@@ -97,4 +116,17 @@ test("buildCsv emits header + one row per event with escapes", () => {
   assert.ok(lines[2].includes('"Video ""best"", part 1"'), "CSV quoting")
   assert.ok(lines[2].includes(",Fun,,rule,"), "rule-sourced category, empty subcategory")
   assert.ok(lines[2].includes(",300,high,"), "estimate 600×50%")
+})
+
+test("CSV preserves parent and subcategory names separately", () => {
+  const csv = buildCsv({
+    videos: { a: video("a", { autoCategoryId: "fun-music" }) },
+    events: [event("a", "2026-11-02")],
+    categories: CATS,
+    subcategories: [
+      { id: "fun-music", parentId: "fun", name: "Music", emoji: "🎵", order: 0 }
+    ]
+  })
+  assert.ok(csv.includes("category,subcategory,categorySource"))
+  assert.ok(csv.includes(",Fun,Music,rule,"))
 })

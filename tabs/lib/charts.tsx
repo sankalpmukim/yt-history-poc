@@ -93,6 +93,7 @@ export function Donut({
   slices,
   colorOf,
   labelOf,
+  onSliceClick,
   total,
   size = 190,
   thickness = 26
@@ -100,6 +101,7 @@ export function Donut({
   slices: DonutSlice[]
   colorOf: (categoryId: string | null) => string
   labelOf: (categoryId: string | null) => string
+  onSliceClick?: (categoryId: string | null) => void
   total: number
   size?: number
   thickness?: number
@@ -125,6 +127,19 @@ export function Donut({
             strokeDasharray={`${dash} ${c - dash}`}
             strokeDashoffset={-cum}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            role={onSliceClick && s.categoryId ? "button" : undefined}
+            tabIndex={onSliceClick && s.categoryId ? 0 : undefined}
+            aria-label={onSliceClick && s.categoryId ? `Drill into ${labelOf(s.categoryId)}` : undefined}
+            style={onSliceClick && s.categoryId ? { cursor: "pointer" } : undefined}
+            onClick={() => {
+              if (s.categoryId) onSliceClick?.(s.categoryId)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                if (s.categoryId) onSliceClick?.(s.categoryId)
+              }
+            }}
           >
             <title>{`${labelOf(s.categoryId)}: ${fmtDur(s.seconds)}`}</title>
           </circle>

@@ -107,3 +107,23 @@ test("under-budget and no-spend cases", () => {
   assert.equal(rot.over, false)
   assert.equal(overBudgetCategories(status).size, 0)
 })
+
+test("subcategory watch time rolls up into its top-level budget", () => {
+  const now = new Date(2026, 10, 4, 12, 0, 0)
+  const subcategories = [
+    { id: "deep-lectures", parentId: "deep", name: "Lectures", emoji: "📚", order: 0 }
+  ]
+  const status = computeBudgetStatus({
+    videos: { lecture: video("lecture", "deep-lectures") },
+    events: [event("lecture", "2026-11-03")],
+    categories: CATS,
+    subcategories,
+    budgetsWeekly: { deep: 300, "deep-lectures": 1 },
+    now
+  })
+  assert.equal(status.spentByCategory.deep, 600)
+  assert.equal(status.entries.length, 1, "budgets remain top-level only")
+  assert.equal(status.entries[0].categoryId, "deep")
+  assert.equal(status.entries[0].spentSec, 600)
+  assert.equal(status.entries[0].over, true)
+})

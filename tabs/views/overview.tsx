@@ -127,6 +127,9 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
             colorOf={colorOf}
             labelOf={labelOf}
             total={agg.totalSeconds}
+            onSliceClick={(id) => {
+              if (!drill && id && catById.has(id)) setDrill(id)
+            }}
           />
           <div className="legend">
             {agg.byCategory.map((c) => (

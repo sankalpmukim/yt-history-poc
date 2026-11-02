@@ -6,6 +6,7 @@ import { patchSettings, writeCategories, writeRules } from "../lib/data"
 import type { Category, Rule } from "../../core/types"
 import { compileRules, previewMatches } from "../../core/rules"
 import { validTargetIds } from "../../core/taxonomy"
+import { BudgetModeControl } from "../lib/ui"
 import { runRulesPass } from "../../core/ledger"
 import { ChromeKV } from "../../core/storage"
 
@@ -244,19 +245,8 @@ function BudgetModeStep({
       <p className="muted small">
         Once you set weekly time budgets (Budgets tab), YT Ledger can act on them while you browse:
       </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "12px 0" }}>
-        {(
-          [
-            ["off", "Off — just track, never touch YouTube"],
-            ["gentle", "Gentle — subtly highlight over-budget videos (red border + label)"],
-            ["strict", "Strict — blur/hide over-budget thumbnails & titles in feeds; interstitial on watch pages"]
-          ] as const
-        ).map(([m, label]) => (
-          <label key={m} className="small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="radio" name="budgetmode" checked={mode === m} onChange={() => setMode(m)} />
-            {label}
-          </label>
-        ))}
+      <div style={{ margin: "12px 0" }}>
+        <BudgetModeControl value={mode} onChange={setMode} />
       </div>
       <p className="muted small">You can change or disable this anytime in Settings. No budget set = nothing happens.</p>
       <div className="row" style={{ justifyContent: "flex-end" }}>

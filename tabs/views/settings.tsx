@@ -9,6 +9,8 @@ import { ensureInitialized } from "../../core/ledger"
 import { buildBackup, buildCsv, validateBackup, backupToShards, isLedgerKey } from "../../core/exports"
 import { KEYS, eventsKey } from "../../core/types"
 import { APP_VERSION } from "../../core/version"
+import { BudgetModeControl } from "../lib/ui"
+import { DEFAULT_SUBCATEGORIES } from "../../core/defaults"
 
 const LOOKBACKS = [7, 14, 30, 60, 90]
 
@@ -77,7 +79,7 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
       const writes: Record<string, unknown> = {
         [KEYS.meta]: backup.data.meta,
         [KEYS.categories]: backup.data.categories,
-        [KEYS.subcategories]: backup.data.subcategories ?? [],
+        [KEYS.subcategories]: backup.data.subcategories ?? DEFAULT_SUBCATEGORIES,
         [KEYS.rules]: backup.data.rules,
         [KEYS.videos]: backup.data.videos
       }
@@ -180,18 +182,18 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
 
       <div className="card">
         <h2>YouTube integration</h2>
-        <div className="row" style={{ marginBottom: 8 }}>
-          <label className="small">
-            Budget enforcement
-            <select
+        <div className="row" style={{ marginBottom: 8, alignItems: "flex-start" }}>
+          <div>
+            <div className="small" style={{ marginBottom: 6 }}>Budget enforcement</div>
+            <BudgetModeControl
               value={settings.budgetMode}
-              onChange={(e) => void patchSettings({ budgetMode: e.target.value as "off" | "gentle" | "strict" })}
-            >
-              <option value="off">Off</option>
-              <option value="gentle">Gentle — highlight over-budget videos</option>
-              <option value="strict">Strict — hide/blur over-budget videos</option>
-            </select>
-          </label>
+              onChange={(mode) => void patchSettings({ budgetMode: mode })}
+              compact
+            />
+          </div>
+          <span className="small" role="status" aria-live="polite" style={{ alignSelf: "center" }}>
+            Current mode: <b>{settings.budgetMode}</b>
+          </span>
         </div>
         <div className="muted small">Configure hours/week in the Budgets tab. Off (default) never touches YouTube; Gentle highlights; Strict blurs/hides. Unknown videos are never blocked.</div>
       </div>

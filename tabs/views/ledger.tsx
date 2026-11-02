@@ -22,6 +22,10 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
   const [onlyUncategorized, setOnlyUncategorized] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pickerFor, setPickerFor] = useState<string | null>(null)
+  const catById = useMemo(
+    () => new Map(data.categories.map((c) => [c.id, c] as const)),
+    [data.categories]
+  )
 
   const rows = useMemo(() => {
     const agg = aggregateRange({
@@ -34,7 +38,14 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
     const q = query.trim().toLowerCase()
     return agg.rows.filter((r) => {
       if (onlyUncategorized && r.categoryId != null) return false
-      if (catFilter !== "all" && (catFilter === "none" ? r.categoryId != null : r.categoryId !== catFilter))
+      if (
+        catFilter !== "all" &&
+        (catFilter === "none"
+          ? r.categoryId != null
+          : catById.has(catFilter)
+            ? r.categoryId !== catFilter
+            : r.targetId !== catFilter)
+      )
         return false
       if (q) {
         const hay = `${r.video.title} ${r.video.channel}`.toLowerCase()
@@ -85,9 +96,13 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
           <option value="all">All categories</option>
           <option value="none">Uncategorized</option>
           {data.categories.filter((c) => !c.archivedAt).map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.emoji} {c.name}
-            </option>
+            <optgroup key={c.id} label={`${c.emoji} ${c.name}`}>
+              <option value={c.id}>{c.name} (all)</option>
+              {data.subcategories
+                .filter((s) => s.parentId === c.id && !s.archivedAt)
+                .sort((a, b) => a.order - b.order)
+                .map((s) => <option key={s.id} value={s.id}>{c.name} › {s.name}</option>)}
+            </optgroup>
           ))}
         </select>
         <label className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -175,6 +190,7 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
                     <th>Channel</th>
                     <th style={{ width: 70 }}>Duration</th>
                     <th style={{ width: 70 }}>Est. watched</th>
+                    <th style={{ width: 150 }}>Value tier</th>
                     <th style={{ width: 34 }}></th>
                     <th style={{ width: 20 }}></th>
                   </tr>
@@ -186,6 +202,7 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
                       row={r}
                       categories={data.categories}
                       subcategories={data.subcategories}
+                      tier={r.categoryId ? catById.get(r.categoryId) : undefined}
                       checked={selected.has(r.video.videoId)}
                       onToggle={() => toggle(r.video.videoId)}
                       onPickCategory={() => setPickerFor(r.video.videoId)}
@@ -230,6 +247,7 @@ function LedgerRowView({
   row,
   categories,
   subcategories,
+  tier,
   checked,
   onToggle,
   onPickCategory
@@ -237,6 +255,8 @@ function LedgerRowView({
   row: LedgerRow
   categories: import("../../core/types").Category[]
   subcategories: import("../../core/types").Subcategory[]
+  /** top-level category supplying the 0–5 value score */
+  tier: import("../../core/types").Category | undefined
   checked: boolean
   onToggle: () => void
   onPickCategory: () => void
@@ -265,6 +285,22 @@ function LedgerRowView({
       </td>
       <td className="muted">{fmtDur(v.durationSec)}</td>
       <td>{fmtDur(row.estimatedSeconds)}</td>
+      <td>
+        {tier ? (
+          <span
+            className="valuetier"
+            title={`${tier.name} — value ${tier.valueScore}/5 (0 = brain rot, 5 = deep learning)`}
+          >
+            <span className="swatch" style={{ background: tier.color }} />
+            <b>{tier.valueScore}/5</b>
+            <span className="muted small">{tier.name}</span>
+          </span>
+        ) : (
+          <span className="muted small" title="Uncategorized — no value tier yet">
+            —
+          </span>
+        )}
+      </td>
       <td className="muted" title={`estimate confidence: ${row.confidence}`}>
         <span className={"dot " + row.confidence}></span>
       </td>
