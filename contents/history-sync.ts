@@ -20,6 +20,7 @@
 
 import type { PlasmoCSConfig } from "plasmo"
 import mainWorldUrl from "url:./history-main"
+import { APP_VERSION } from "../core/version"
 import type { FetchResult, HistorySection } from "../utils/history-types"
 import { dayLabelToDate } from "../utils/day"
 import { dateKeyOf } from "../core/types"
@@ -50,13 +51,43 @@ let inFlight = false
 let settingsCache: Settings | null = null
 
 /* ------------------------------------------------------------------ */
+/* legacy POC overlay cleanup                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The old POC extension rendered a bottom-right overlay
+ * (#yt-history-poc-overlay). Content scripts from a previous install keep
+ * running in already-open tabs after an extension reload (their chrome.*
+ * APIs die with "Cannot read properties of undefined"), and can re-add
+ * their overlay on SPA navigations. Remove the element and keep removing
+ * it for a while if an orphaned script re-adds it. The observer watches
+ * only documentElement's direct children (where that overlay was appended)
+ * so the cost is negligible.
+ */
+function armLegacyOverlayCleanup(): void {
+  const legacyId = "yt-history-poc-overlay"
+  const removeIt = () => {
+    try {
+      document.getElementById(legacyId)?.remove()
+    } catch {}
+  }
+  removeIt()
+  try {
+    const observer = new MutationObserver(() => removeIt())
+    observer.observe(document.documentElement, { childList: true })
+    // orphaned scripts die with their tab; 5 minutes is generous
+    setTimeout(() => observer.disconnect(), 300_000)
+  } catch {}
+}
+
+/* ------------------------------------------------------------------ */
 /* settings (read-only mirror of yl.v2.meta)                           */
 /* ------------------------------------------------------------------ */
 
 async function readSettings(): Promise<Settings | null> {
   if (settingsCache) return settingsCache
   try {
-    const bag = await chrome.storage.local.get("yl.v2.meta")
+    const bag = await chrome.storage?.local?.get("yl.v2.meta")
     const s = bag?.["yl.v2.meta"]?.settings
     if (s) {
       settingsCache = s as Settings
@@ -66,11 +97,15 @@ async function readSettings(): Promise<Settings | null> {
   return null
 }
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== "local") return
-  const meta = changes["yl.v2.meta"]
-  if (meta) settingsCache = meta.newValue?.settings ?? null
-})
+// guarded: in a degraded/orphaned context chrome.storage may be undefined —
+// a top-level throw here would kill the whole content script
+try {
+  chrome.storage?.onChanged?.addListener((changes, area) => {
+    if (area !== "local") return
+    const meta = changes["yl.v2.meta"]
+    if (meta) settingsCache = meta.newValue?.settings ?? null
+  })
+} catch {}
 
 /* ------------------------------------------------------------------ */
 /* page state                                                          */
@@ -340,6 +375,11 @@ window.addEventListener("message", (ev: MessageEvent) => {
 })
 
 setTimeout(() => {
+  armLegacyOverlayCleanup()
+  console.info(
+    `[yt-ledger] content script v${APP_VERSION} loaded on ${location.host}${location.pathname}`
+  )
+  ;(window as any).__YT_LEDGER_VERSION = APP_VERSION
   injectMainWorldScript()
   void announcePageState()
   // give the injected script a moment to attach its listener before asking
@@ -352,14 +392,16 @@ window.addEventListener("yt-navigate-finish", () => {
   void sync("spa-navigate")
 })
 
-// the service worker pokes existing history tabs this way
-chrome.runtime.onMessage.addListener((msg: any, _sender, sendResponse) => {
-  if (msg?.type === "yl.runSync") {
-    void sync("sw-runSync", typeof msg.daysBack === "number" ? msg.daysBack : undefined)
-    sendResponse({ ok: true })
-  }
-  return false
-})
+// the service worker pokes existing history tabs this way (guarded — see above)
+try {
+  chrome.runtime?.onMessage?.addListener((msg: any, _sender, sendResponse) => {
+    if (msg?.type === "yl.runSync") {
+      void sync("sw-runSync", typeof msg.daysBack === "number" ? msg.daysBack : undefined)
+      sendResponse({ ok: true })
+    }
+    return false
+  })
+} catch {}
 
 // manual trigger for devtools: window.__YT_LEDGER_SYNC() or __YT_LEDGER_SYNC(30)
 ;(window as any).__YT_LEDGER_SYNC = (daysBack?: number) => sync("force", daysBack)

@@ -17,6 +17,7 @@
  */
 
 import mainWorldUrl from "url:./contents/history-main"
+import { APP_VERSION } from "./core/version"
 import { chromeKV, readVideos, readDurationQueue } from "./core/storage"
 import type { KV } from "./core/storage"
 import { ensureInitialized, applySyncResult, noteStatus, runRulesPass } from "./core/ledger"
@@ -282,6 +283,7 @@ chrome.runtime.onMessage.addListener((msg: any, sender, sendResponse) => {
 
 async function onLifecycle(event: string): Promise<void> {
   try {
+    console.info(`[yt-ledger] service worker v${APP_VERSION} lifecycle: ${event}`)
     await ensureInitialized(kv, new Date())
     await cleanupSyncState()
     const pruned = await pruneNow(kv, new Date())

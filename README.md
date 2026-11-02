@@ -171,6 +171,45 @@ pnpm build          # → build/chrome-mv3-prod
 - A small on-page debug overlay can be enabled with
   `settings.debugOverlay` in `yl.v2.meta` (off by default).
 
+## Troubleshooting: "YT History POC" overlay / `chrome.storage` undefined
+
+Symptom: a bottom-right overlay with **old POC text** ("YT History POC — 0
+videos (last 2 days) … error: Cannot read properties of undefined (reading
+'local')") after updating the extension.
+
+Cause: that overlay is rendered by the **old POC content script still alive
+in an already-open YouTube tab**. A plain extension *reload* does not
+re-inject content scripts into existing tabs — the previous script keeps
+running there, orphaned, and after a reload its `chrome.*` bindings are dead
+(hence `chrome.storage` being `undefined`). The same text can also linger as
+frozen DOM. Independently, reloading (instead of removing + re-adding) an
+unpacked extension whose manifest **gained permissions** (`unlimitedStorage`
+in M1) can leave it in a permission limbo where extension APIs vanish.
+
+Fix (exact steps):
+
+1. `brave://extensions` → Developer mode on.
+2. **Remove every entry** for this project (both "YT History POC" and any
+   earlier "YT Ledger" load) — a stale second entry keeps injecting its old
+   scripts. Do not keep two.
+3. **Load unpacked** → select exactly
+   `/Users/sankalpmukim/code/personal/yt-history-poc/build/chrome-mv3-prod`.
+   The entry must show **YT Ledger**, version **0.2.1** (see `core/version.ts`;
+   a version-sync unit test keeps it matched to package.json).
+4. **Hard-reload every open YouTube tab** (⌘⇧R) or close them and open a
+   fresh one — this kills orphaned old scripts and lets the new content
+   script inject.
+5. Verify in the YouTube tab's console (filter `yt-ledger`):
+   `content script v0.2.1 loaded on www.youtube.com/…` appears, and
+   `window.__YT_LEDGER_VERSION` returns `"0.2.1"`.
+6. The new build also **auto-removes any leftover POC overlay** and keeps
+   removing it if an orphaned script re-adds it (for 5 minutes after load),
+   so the old card disappears once the new script runs.
+
+Quick identity check for "which build is live": the console line above, the
+version on `brave://extensions`, and `window.__YT_LEDGER_VERSION` in any
+YouTube tab must all agree.
+
 ## Known limitations
 
 - No toolbar popup page: Plasmo 0.90.5 pins parcel 2.9.3, whose resolver
