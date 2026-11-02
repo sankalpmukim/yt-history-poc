@@ -19,12 +19,16 @@ Owner decisions (2026-11-02, override PLAN.md where different):
 6. **Budget enforcement on YouTube pages**, user-chosen mode: **off / gentle /
    strict** (see §4.5 of PLAN.md).
 7. **Sync must be invisible** and never disrupt YouTube browsing.
+8. **Subcategories** can be created, renamed, archived, and reordered under a
+   category. Videos and rules may target them; charts default to parent-level
+   rollups with click-to-drill-down. Pickers, the rule editor, and Ledger label
+   them as **Parent › Sub** (e.g. `Practical how-tos › Coding`).
 
 Milestone mapping: PLAN.md defines milestones **M1–M8** (M7 = budgets, M8 = budget
 enforcement on YouTube). This checklist is organised M1–M8 plus cross-cutting
 sections that span phases (install/upgrade/migration, permissions & reinstall,
-privacy, performance, error states, empty states, accessibility, regressions), and
-ends with a **smoke subset** to run between phases.
+privacy, performance, error states, empty states, accessibility, regressions,
+subcategories), and ends with a **smoke subset** to run between phases.
 
 ---
 
@@ -533,6 +537,35 @@ Run the relevant subset after every phase.
 | REG-009 | Invisibility holistic session | Sync due; user session 30 min | Browse normally with video, search, Shorts | User notices nothing (syncs, hidden tabs, resolver all silent) | P0 | Manual |
 | REG-010 | Duration cache across updates | Resolved durations | Update build; sync | No re-fetch storm (cache persists) | P2 | Semi |
 
+## SUB — Subcategories
+
+Owner-approved addition to the planned feature set. Subcategories belong to a
+top-level category; charts aggregate at the top level by default and allow
+drill-down. Everywhere a subcategory is named, use **Parent › Sub**. For delete
+and archive behavior with assigned data, verify that the chosen policy is
+explicit and never leaves dangling video or rule references.
+
+| ID | Area | Preconditions | Steps | Expected | Pri | How |
+|---|---|---|---|---|---|---|
+| SUB-001 | Create subcategory | Categories manager open; parent exists | Add `Coding` under `Practical how-tos` | Subcategory is saved under that parent and appears in the hierarchy | P0 | Auto |
+| SUB-002 | Rename subcategory | Sub has assigned videos and a rule | Rename `Coding` to `Development` | References remain intact; all surfaces show `Practical how-tos › Development` | P1 | Auto |
+| SUB-003 | Archive subcategory | Sub exists | Archive it; open category pickers | Archived sub is unavailable for new assignments; existing history remains readable | P1 | Auto |
+| SUB-004 | Reorder subcategories | Parent has at least two subs | Reorder them | New sibling order appears consistently in manager, pickers, and drill-down | P1 | Auto |
+| SUB-005 | Assign video to subcategory | Video exists in Ledger | Assign it to `Practical how-tos › Coding` | Video assignment persists to the subcategory; aggregates update without duplicate counting | P0 | Auto |
+| SUB-006 | Rule targets subcategory | Rule editor open; matching videos exist | Create a rule targeting `Practical how-tos › Coding`; sync | Matching videos are categorized to that sub; manual overrides still win | P0 | Auto |
+| SUB-007 | Chart top-level default | Parent and subcategory events exist | Open Overview charts | Default charts show top-level categories with subcategory time included in parent totals | P0 | Auto |
+| SUB-008 | Chart drill-down | Parent has multiple subs and direct assignments | Click the parent chart segment/row | Chart drills into its subs; parent-only time remains represented and totals reconcile | P0 | Semi |
+| SUB-009 | Category picker labels | Sub exists | Open review-queue, Ledger, bulk-assignment, and category pickers | Sub choices display as `Practical how-tos › Coding`; parent remains independently selectable | P0 | Auto |
+| SUB-010 | Ledger label | Video assigned to a sub | View its Ledger row and category chip | Label is `Parent › Sub`, not the sub name alone | P0 | Auto |
+| SUB-011 | Rule editor label | Rule targets a sub | Open the rule editor | Selected category displays as `Parent › Sub`; saved rule retains the sub target | P0 | Auto |
+| SUB-012 | Parent budget roll-up | Weekly budget on parent; current-week events assigned to its sub | Open Budgets and inspect budget status | Subcategory time contributes to the parent budget exactly once | P0 | Auto |
+| SUB-013 | Delete sub with assigned videos | Videos have manual or automatic subcategory assignments | Delete the sub and confirm | Confirmation explains outcome; videos move to a defined safe target (parent or uncategorized); no dangling ids | P0 | Semi |
+| SUB-014 | Archive sub with assigned videos | Videos assigned to sub | Archive the sub; inspect Ledger, charts, and budgets | Existing assignments remain understandable and included in parent totals; no silent loss | P0 | Semi |
+| SUB-015 | Delete sub targeted by rule | Enabled rule targets sub | Attempt deletion; then sync if allowed | UI warns and safely retargets/disables the rule or blocks deletion; later sync does not crash | P0 | Semi |
+| SUB-016 | Archive sub targeted by rule | Enabled rule targets sub | Archive it; evaluate a matching video | Rule behavior is explicit and safe; it cannot create an unusable archived assignment | P1 | Semi |
+| SUB-017 | Export/import subcategory data | Subs, assignments, rules, and parent budgets exist | Export JSON/CSV; import JSON into a clean profile | JSON restores hierarchy, video/rule references, and budgets; CSV labels are auditable as `Parent › Sub` | P0 | Auto |
+| SUB-018 | Flat-data migration | Existing profile has flat categories, videos, and rules | Upgrade to subcategory-capable schema | Existing data remains attached to its original top-level categories; no forced subs or dangling references | P1 | Auto |
+
 ## SMOKE — Between-phase subset (~15–20 min)
 
 Run after each phase completes (and before calling any phase done). All items
@@ -560,6 +593,9 @@ reference full cases above.
 | SMK-18 | Strict: search hiding + interstitial (M8-012/015) | Hidden w/ placeholder; Watch anyway works |
 | SMK-19 | Privacy: net-log clean; devRelay silent (PRIV-001/002) | No egress |
 | SMK-20 | Fresh profile: empty states + console clean (EMPTY-001, ERR-014) | No errors/NaNs |
+| SMK-21 | Create sub, assign a video, verify Parent › Sub in Ledger and rule editor (SUB-001/005/010/011) | Assignment and labels persist |
+| SMK-22 | Check parent-level chart roll-up, then drill into subs (SUB-007/008) | Parent total reconciles; drill-down retains parent-only time |
+| SMK-23 | Parent budget includes sub spend; export/import preserves sub and rule references (SUB-012/017) | Budget and hierarchy survive round-trip |
 
 ---
 
@@ -583,8 +619,9 @@ reference full cases above.
 | EMPTY Empty states | 10 | 1 | 8 | 1 | 8 | 2 | 0 |
 | A11Y Accessibility | 12 | 1 | 9 | 2 | 0 | 7 | 5 |
 | REG Regressions | 10 | 6 | 2 | 2 | 8 | 1 | 1 |
-| **Total** | **343** | **153** | **154** | **36** | **198** | **131** | **14** |
-| SMOKE (derived) | 20 | — | — | — | — | — | — |
+| SUB Subcategories | 18 | 13 | 5 | 0 | 13 | 5 | 0 |
+| **Total** | **361** | **166** | **159** | **36** | **211** | **136** | **14** |
+| SMOKE (derived) | 23 | — | — | — | — | — | — |
 
 Maintenance: when a phase lands, mark each case pass/fail/blocked in a run log
 (separate file or column added here); any plan change that alters expected
