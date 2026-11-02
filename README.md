@@ -5,6 +5,17 @@ YouTube watch history (watch events = transactions, categories = spending
 categories, value scores = the inverse of cost, budgets = time budgets).
 See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
 
+**Status: M6 complete** — everything in M5 plus the **onboarding wizard**
+(first dashboard open: privacy intro → category-ladder pass with live
+renames/re-scores → starter-rules selection with live match counts and a
+"start clean" option → budget-mode choice; skipping anywhere keeps the
+non-irritating fallback defaults; rerunnable from Settings) and
+**Insights**: worst offenders (channels by time in score ≤1), best-value
+channels (score ≥4), weekday-average watch pattern, and **rule
+suggestions** — channels you keep categorizing the same way manually
+("always categorize…?" one click) and channels with the most uncategorized
+time.
+
 **Status: M5 complete** — everything in M4 plus the **Rules UI** (ordered
 list with enable/reorder/delete, hit counts, dead/archive warnings; full
 editor for channel equals/contains, title any-of, title regex + flags,

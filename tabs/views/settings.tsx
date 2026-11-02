@@ -211,6 +211,15 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
           <button className="btn" onClick={() => void exportJson()}>⬇ Export JSON backup</button>
           <button className="btn" onClick={() => void exportCsv()}>⬇ Export CSV ledger</button>
           <button className="btn" onClick={() => fileRef.current?.click()}>⬆ Import JSON</button>
+          <button
+            className="btn"
+            onClick={() => {
+              void patchSettings({ onboardedAt: null })
+              location.hash = "#/onboarding"
+            }}
+          >
+            ↺ Rerun onboarding
+          </button>
           <input
             ref={fileRef} type="file" accept="application/json" style={{ display: "none" }}
             onChange={(e) => {

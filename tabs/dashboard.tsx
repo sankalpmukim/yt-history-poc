@@ -12,6 +12,8 @@ import { LedgerView } from "./views/ledger"
 import { RulesView } from "./views/rules"
 import { CategoriesView } from "./views/categories"
 import { SettingsView } from "./views/settings"
+import { InsightsView } from "./views/insights"
+import { OnboardingView } from "./views/onboarding"
 import { PlaceholderView } from "./views/placeholder"
 
 interface RouteDef {
@@ -25,11 +27,7 @@ const ROUTES: RouteDef[] = [
   { id: "ledger", label: "🧾 Ledger", el: (p) => <LedgerView {...p} /> },
   { id: "rules", label: "⚖️ Rules", el: (p) => <RulesView {...p} /> },
   { id: "categories", label: "🏷️ Categories", el: (p) => <CategoriesView {...p} /> },
-  {
-    id: "insights",
-    label: "🔍 Insights",
-    el: () => <PlaceholderView title="Insights" note="Insights land in M6." />
-  },
+  { id: "insights", label: "🔍 Insights", el: (p) => <InsightsView {...p} /> },
   {
     id: "budgets",
     label: "⏱️ Budgets",
@@ -63,11 +61,33 @@ export default function Dashboard() {
     return subscribeLedger(() => void reload())
   }, [reload])
 
+  const onboarded = data?.meta?.settings?.onboardedAt != null
+
+  // first run: force the wizard; once done: never show it again
+  useEffect(() => {
+    if (data == null) return
+    if (!onboarded && route !== "onboarding") navigate("onboarding")
+    if (onboarded && route === "onboarding") navigate("overview")
+  }, [data, onboarded, route])
+
   if (data == null) {
     return (
       <div style={{ padding: 40 }} className="muted">
         Loading ledger…
       </div>
+    )
+  }
+
+  if (route === "onboarding") {
+    return (
+      <>
+        <style>{CSS}</style>
+        <OnboardingView
+          data={data}
+          reload={reload}
+          onFinish={() => navigate("overview")}
+        />
+      </>
     )
   }
 
