@@ -1,16 +1,11 @@
 /**
- * Shared types + constants for the YT History POC.
- * Used by both the MAIN-world fetcher and the isolated-world sync script
- * (each content script is bundled separately, so this module gets inlined twice).
+ * Shared types + constants between the MAIN-world fetcher/observer and the
+ * isolated-world sync script. Also keeps the legacy v1 POC shapes that the
+ * one-time v1→v2 migration reads.
  */
 
+/** Legacy POC cache key (kept as the migration source; never written again). */
 export const STORAGE_KEY = "ytHistoryPoc.v1"
-
-/** The window we care about: Today + Yesterday. */
-export const MAX_DAYS = 2
-
-/** Retention for cached entries: never keep anything first seen more than 48h ago. */
-export const RETENTION_MS = 48 * 60 * 60 * 1000
 
 export interface HistoryItem {
   videoId: string
@@ -19,6 +14,10 @@ export interface HistoryItem {
   url: string
   /** e.g. "Watched 43%" or "" when unknown */
   watchState: string
+  /** Duration in seconds when the history item exposed it, else null/absent. */
+  durationSec?: number | null
+  /** Where durationSec came from ("overlay" | "legacy"); null when unknown. */
+  durationSource?: "overlay" | "legacy" | null
 }
 
 export interface HistorySection {
@@ -38,9 +37,11 @@ export interface FetchResult {
   sections: HistorySection[]
   meta: FetchMeta
   fetchedAt: string
-  /** TEMP POC debug: raw first page JSON (sliced), relayed via storage. */
-  debugRaw?: string
 }
+
+/* ------------------------------------------------------------------ */
+/* legacy v1 POC store (read-only, migration source)                    */
+/* ------------------------------------------------------------------ */
 
 export interface StoredEntry extends HistoryItem {
   /** Day label at the most recent sync where this entry was seen. */
@@ -54,8 +55,4 @@ export interface StoreShape {
   lastSyncedAt: string | null
   lastSyncStatus: string
   entries: Record<string, StoredEntry>
-}
-
-export function emptyStore(): StoreShape {
-  return { version: 1, lastSyncedAt: null, lastSyncStatus: "never synced", entries: {} }
 }

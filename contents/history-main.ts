@@ -1,12 +1,18 @@
 /**
- * MAIN-world content script: fetches watch history via YouTube's own
- * innertube API (/youtubei/v1/browse, browseId=FEhistory) using the page's
- * session (cookies ride along automatically — we never read them directly).
+ * MAIN-world content script (YT Ledger).
  *
- * Pagination stops as soon as a day-section older than the 2-day window
- * (Today + Yesterday) is detected, so we never fetch more than needed.
+ * Two data sources, both "read what the page itself fetched":
+ *  1. window.ytInitialData on /feed/history (the server-rendered first page)
+ *  2. a READ-ONLY fetch observer that captures the page's own
+ *     /youtubei/v1/browse continuation responses as the user scrolls through
+ *     history — this is what makes a lookback deeper than the first page
+ *     possible without making any new authenticated requests ourselves.
  *
- * Communicates with the isolated-world sync script via window.postMessage.
+ * Additionally attempts the direct innertube browse POST on non-history pages
+ * (known to come back logged_in:0 in Brave; kept because it may work in other
+ * Chromium builds).
+ *
+ * Communication with the isolated-world sync script: window.postMessage.
  */
 
 import type { PlasmoCSConfig } from "plasmo"
@@ -16,6 +22,7 @@ import type {
   HistorySection
 } from "../utils/history-types"
 import { dayLabelToDate, startOfDay } from "../utils/day"
+import { parseDurationText } from "../core/duration"
 
 export const config: PlasmoCSConfig = {
   matches: ["*://*.youtube.com/*"],
@@ -23,13 +30,15 @@ export const config: PlasmoCSConfig = {
   run_at: "document_idle"
 }
 
-const MSG_SOURCE = "yt-history-poc"
-const REQ_TYPE = "YT_HISTORY_POC_FETCH_REQUEST"
-const RES_TYPE = "YT_HISTORY_POC_FETCH_RESPONSE"
-const READY_TYPE = "YT_HISTORY_POC_MAIN_READY"
+const MSG_SOURCE = "yt-ledger"
+const REQ_TYPE = "YT_LEDGER_FETCH_REQUEST"
+const RES_TYPE = "YT_LEDGER_FETCH_RESPONSE"
+const READY_TYPE = "YT_LEDGER_MAIN_READY"
 
-const MAX_PAGES = 8
+const DEFAULT_DAYS_BACK = 14
+const MAX_PAGES = 30
 const PAGE_DELAY_MS = 200
+const MAX_OBSERVED_ITEMS = 4000
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
@@ -66,13 +75,18 @@ function textOf(node: any): string {
 /** Read the innertube API key + client context from the page's ytcfg global. */
 function getInnertubeCfg(): { apiKey: string; context: any } | null {
   try {
-    // Accessing ytcfg.get would be cleaner but data_ is the raw backing store.
     const cfg = (window as any).ytcfg?.data_
     const apiKey: string | undefined = cfg?.INNERTUBE_API_KEY
     const context = cfg?.INNERTUBE_CONTEXT
     if (apiKey && context) return { apiKey, context }
   } catch {}
   return null
+}
+
+function clampDaysBack(v: any): number {
+  const n = typeof v === "number" ? v : parseInt(String(v ?? ""), 10)
+  if (!Number.isFinite(n)) return DEFAULT_DAYS_BACK
+  return Math.min(90, Math.max(1, Math.round(n)))
 }
 
 /* ------------------------------------------------------------------ */
@@ -87,10 +101,18 @@ function parseWatchState(container: any): string {
   return typeof pct === "number" ? `Watched ${pct}%` : ""
 }
 
+/** Duration badge on the thumbnail overlay: "12:34" → 754s. */
+function parseDurationFromOverlay(container: any): { sec: number; source: "overlay" } | null {
+  const badge = collect(container, "thumbnailOverlayTimeStatusRenderer")[0]
+  const sec = parseDurationText(textOf(badge?.text))
+  return sec != null ? { sec, source: "overlay" } : null
+}
+
 function parseItem(node: any): HistoryItem | null {
   // Classic desktop shape
   const vr = node?.videoRenderer
   if (vr?.videoId) {
+    const legacy = parseDurationText(textOf(vr.lengthText))
     return {
       videoId: vr.videoId,
       title: textOf(vr.title),
@@ -99,7 +121,9 @@ function parseItem(node: any): HistoryItem | null {
         textOf(vr.longBylineText) ||
         textOf(vr.shortBylineText),
       url: `https://www.youtube.com/watch?v=${vr.videoId}`,
-      watchState: parseWatchState(vr.thumbnailOverlays)
+      watchState: parseWatchState(vr.thumbnailOverlays),
+      durationSec: legacy,
+      durationSource: legacy != null ? "legacy" : null
     }
   }
 
@@ -114,24 +138,30 @@ function parseItem(node: any): HistoryItem | null {
         if (typeof part?.text?.content === "string") parts.push(part.text.content)
       }
     }
+    const overlay = parseDurationFromOverlay(lock.contentImage ?? lock)
     return {
       videoId: lock.contentId,
       title: meta?.title?.content ?? "",
       channel: parts.find((p) => !/^(watched|[\d.,]+[KM]?)$/i.test(p)) ?? "",
       url: `https://www.youtube.com/watch?v=${lock.contentId}`,
-      watchState: parseWatchState(lock)
+      watchState: parseWatchState(lock),
+      durationSec: overlay?.sec ?? null,
+      durationSource: overlay ? overlay.source : null
     }
   }
 
   // Mobile-web shape seen in some experiments
   const vw = node?.videoWithContextRenderer
   if (vw?.videoId) {
+    const legacy = parseDurationText(textOf(vw.lengthText))
     return {
       videoId: vw.videoId,
       title: textOf(vw.headline) || textOf(vw.title),
       channel: textOf(vw.shortBylineText) || textOf(vw.shortViewCountText),
       url: `https://www.youtube.com/watch?v=${vw.videoId}`,
-      watchState: ""
+      watchState: "",
+      durationSec: legacy,
+      durationSource: legacy != null ? "legacy" : null
     }
   }
 
@@ -168,35 +198,27 @@ function extractContinuation(scope: any): string | null {
 }
 
 /* ------------------------------------------------------------------ */
-/* fetch loop                                                          */
+/* day window                                                          */
 /* ------------------------------------------------------------------ */
 
-function errorResult(error: string): FetchResult {
-  return {
-    ok: false,
-    sections: [],
-    meta: { pagesFetched: 0, stoppedBecause: "error", error },
-    fetchedAt: new Date().toISOString()
-  }
-}
-
-/** start of Yesterday = the 2-day window [yesterday, today] */
-function cutoffOf(now: Date): Date {
+/** start of the oldest day still inside the lookback window */
+function cutoffOf(now: Date, daysBack: number): Date {
   const cutoff = startOfDay(now)
-  cutoff.setDate(cutoff.getDate() - 1)
+  cutoff.setDate(cutoff.getDate() - (daysBack - 1))
   return cutoff
 }
 
 /**
  * Parse history sections from a browse/ytInitialData-shaped object, keeping
- * only sections inside the 2-day window. Returns sections and whether a
- * section older than the window was seen (pagination stop signal).
+ * only sections inside the lookback window. `hitOlder` is the pagination
+ * stop signal (a section older than the window was seen).
  */
 function parseSectionsFromResponse(
   scope: any,
-  now: Date
+  now: Date,
+  daysBack: number
 ): { sections: HistorySection[]; hitOlder: boolean } {
-  const cutoff = cutoffOf(now)
+  const cutoff = cutoffOf(now, daysBack)
   const sections: HistorySection[] = []
   const seen = new Set<string>()
   let hitOlder = false
@@ -220,7 +242,120 @@ function parseSectionsFromResponse(
   return { sections, hitOlder }
 }
 
-async function fetchHistory(): Promise<FetchResult> {
+/* ------------------------------------------------------------------ */
+/* observed sections (the page's own continuation fetches)             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * dayLabel -> section. Filled by the fetch observer below. YouTube's
+ * continuations are disjoint chunks, but we still guard against re-delivery
+ * of already-seen occurrences (per videoId counts) so repeats are never
+ * double-counted.
+ */
+const observed = new Map<string, HistorySection>()
+let observedItems = 0
+let observedCappedLogged = false
+
+/**
+ * Given an existing (newer, authoritative) item list and an incoming list for
+ * the same day, return only incoming items that represent watches not already
+ * counted. If the incoming snapshot for a videoId holds FEWER occurrences
+ * than we already have, it is an older snapshot → skip that videoId.
+ */
+function newOccurrences(existing: HistoryItem[], incoming: HistoryItem[]): HistoryItem[] {
+  const existingCount = new Map<string, number>()
+  for (const it of existing) existingCount.set(it.videoId, (existingCount.get(it.videoId) ?? 0) + 1)
+  const incomingCount = new Map<string, number>()
+  for (const it of incoming) incomingCount.set(it.videoId, (incomingCount.get(it.videoId) ?? 0) + 1)
+  const seenIncoming = new Map<string, number>()
+  const out: HistoryItem[] = []
+  for (const it of incoming) {
+    const n = seenIncoming.get(it.videoId) ?? 0
+    seenIncoming.set(it.videoId, n + 1)
+    if ((incomingCount.get(it.videoId) ?? 0) < (existingCount.get(it.videoId) ?? 0)) continue
+    if (n >= (existingCount.get(it.videoId) ?? 0)) out.push(it)
+  }
+  return out
+}
+
+function recordObservedSections(scope: any, now: Date): void {
+  if (observedItems >= MAX_OBSERVED_ITEMS) {
+    if (!observedCappedLogged) {
+      observedCappedLogged = true
+      console.info(`[yt-ledger] observed-section cap (${MAX_OBSERVED_ITEMS}) reached; ignoring further continuations`)
+    }
+    return
+  }
+  for (const raw of collect(scope, "itemSectionRenderer")) {
+    const sec = parseSection(raw)
+    if (!sec) continue
+    const d = dayLabelToDate(sec.dayLabel, now)
+    if (!d) continue
+    const prev = observed.get(sec.dayLabel)
+    if (!prev) {
+      observed.set(sec.dayLabel, sec)
+      observedItems += sec.items.length
+    } else {
+      const fresh = newOccurrences(prev.items, sec.items)
+      prev.items.push(...fresh)
+      observedItems += fresh.length
+    }
+  }
+}
+
+function installFetchObserver(): void {
+  try {
+    const origFetch = window.fetch.bind(window)
+    ;(window as any).fetch = async function (input: any, init?: any) {
+      const res = await origFetch(input, init)
+      try {
+        const url = typeof input === "string" ? input : String(input?.url ?? "")
+        if (url.includes("/youtubei/v1/browse")) {
+          res
+            .clone()
+            .json()
+            .then((j: any) => {
+              try {
+                recordObservedSections(scopeHistoryContainer(j), new Date())
+              } catch {}
+            })
+            .catch(() => {})
+        }
+      } catch {}
+      return res
+    }
+  } catch (e) {
+    console.warn("[yt-ledger] fetch observer install failed:", e)
+  }
+}
+
+function combineSections(base: HistorySection[], extra: HistorySection[]): HistorySection[] {
+  const out: HistorySection[] = base.map((s) => ({ dayLabel: s.dayLabel, items: [...s.items] }))
+  for (const ex of extra) {
+    const existing = out.find((s) => s.dayLabel === ex.dayLabel)
+    if (!existing) {
+      out.push({ dayLabel: ex.dayLabel, items: [...ex.items] })
+    } else {
+      existing.items.push(...newOccurrences(existing.items, ex.items))
+    }
+  }
+  return out
+}
+
+/* ------------------------------------------------------------------ */
+/* fetch loop                                                          */
+/* ------------------------------------------------------------------ */
+
+function errorResult(error: string): FetchResult {
+  return {
+    ok: false,
+    sections: [],
+    meta: { pagesFetched: 0, stoppedBecause: "error", error },
+    fetchedAt: new Date().toISOString()
+  }
+}
+
+async function fetchHistory(daysBack: number): Promise<FetchResult> {
   // ytcfg can appear slightly after document_idle on slow loads.
   let cfg = getInnertubeCfg()
   for (let i = 0; i < 10 && !cfg; i++) {
@@ -230,22 +365,27 @@ async function fetchHistory(): Promise<FetchResult> {
 
   const now = new Date()
 
-  // Preferred path: on /feed/history the page itself already fetched (fully
-  // authenticated) and embedded the data in window.ytInitialData.
+  // Preferred path: on /feed/history the page already fetched (fully
+  // authenticated) the first page into window.ytInitialData; deeper history
+  // arrives via the page's own continuation fetches, captured by the observer.
   if (location.pathname.startsWith("/feed/history")) {
     const initial: any = (window as any).ytInitialData
     if (initial) {
-      const parsed = parseSectionsFromResponse(initial, now)
-      // TEMP POC debug: structural summary (compact, complete).
+      const cutoff = cutoffOf(now, daysBack)
+      const initialSections = parseSectionsFromResponse(initial, now, daysBack).sections
+      const observedSections = [...observed.values()].filter((s) => {
+        const d = dayLabelToDate(s.dayLabel, now)
+        return d != null && d.getTime() >= cutoff.getTime()
+      })
+      const combined = combineSections(initialSections, observedSections)
       return {
         ok: true,
-        sections: parsed.sections,
+        sections: combined,
         meta: {
           pagesFetched: 0,
-          stoppedBecause: parsed.sections.length ? "cutoff" : "empty"
+          stoppedBecause: combined.length ? "cutoff" : "empty"
         },
-        fetchedAt: new Date().toISOString(),
-        debugRaw: `ytInitialData sections=${JSON.stringify(collect(initial, "itemSectionRenderer").length)}`
+        fetchedAt: new Date().toISOString()
       }
     }
     return errorResult("on /feed/history but ytInitialData missing")
@@ -253,18 +393,15 @@ async function fetchHistory(): Promise<FetchResult> {
 
   if (!cfg) {
     return errorResult(
-      "ytcfg/INNERTUBE_CONTEXT not found on this page (not signed in, or YouTube served a non-standard page)"
+      "not on /feed/history and ytcfg/INNERTUBE_CONTEXT unavailable (direct browse would be unauthenticated)"
     )
   }
-
-  const cutoff = cutoffOf(now)
 
   const sections: HistorySection[] = []
   const seen = new Set<string>()
   let pagesFetched = 0
   let token: string | null = null
   let stoppedBecause: FetchResult["meta"]["stoppedBecause"] = "no-more"
-  let rawHead = ""
 
   while (pagesFetched < MAX_PAGES) {
     const body: Record<string, any> = token
@@ -291,17 +428,11 @@ async function fetchHistory(): Promise<FetchResult> {
       return errorResult("browse returned invalid JSON")
     }
     pagesFetched++
-    try {
-      document.title = `${document.title} M:p${pagesFetched}`.slice(0, 180)
-    } catch {}
 
     const scope = scopeHistoryContainer(json)
-    if (pagesFetched === 1 && !rawHead) {
-      rawHead = JSON.stringify(json).slice(0, 4000)
-    }
     let hitOlder = false
     {
-      const parsed = parseSectionsFromResponse(scope, now)
+      const parsed = parseSectionsFromResponse(scope, now, daysBack)
       for (const s of parsed.sections) {
         if (!seen.has(s.dayLabel)) {
           seen.add(s.dayLabel)
@@ -338,8 +469,7 @@ async function fetchHistory(): Promise<FetchResult> {
     ok: true,
     sections,
     meta: { pagesFetched, stoppedBecause },
-    fetchedAt: new Date().toISOString(),
-    debugRaw: `PROBES: ${probes}\nRAW: ${rawHead}`
+    fetchedAt: new Date().toISOString()
   }
 }
 
@@ -347,25 +477,13 @@ async function fetchHistory(): Promise<FetchResult> {
 /* messaging                                                           */
 /* ------------------------------------------------------------------ */
 
-// TEMP POC debug: title markers (readable via accessibility from the tab title).
-try {
-  const mark = (t: string) => {
-    if (!document.title.includes(t)) document.title = `${document.title} ${t}`
-  }
-  mark("|M+")
-  window.addEventListener("message", async (ev: MessageEvent) => {
-    if (ev.source !== window) return
-    const data: any = ev.data
-    if (data?.source === MSG_SOURCE && data?.type === REQ_TYPE) mark("M:req")
-  })
-  const cfg0 = getInnertubeCfg()
-  mark(cfg0 ? "M:cfg" : "M:nocfg")
-} catch {}
-
 // Guard against double-loading (script tag + possible SW registration).
 const w0 = window as any
-if (!w0.__YT_HISTORY_POC_MAIN_LOADED__) {
-  w0.__YT_HISTORY_POC_MAIN_LOADED__ = true
+if (!w0.__YT_LEDGER_MAIN_LOADED__) {
+  w0.__YT_LEDGER_MAIN_LOADED__ = true
+
+  installFetchObserver()
+  console.info("[yt-ledger] MAIN-world fetcher+observer loaded")
 
   window.addEventListener("message", async (ev: MessageEvent) => {
     if (ev.source !== window) return
@@ -374,7 +492,7 @@ if (!w0.__YT_HISTORY_POC_MAIN_LOADED__) {
 
     let payload: FetchResult
     try {
-      payload = await fetchHistory()
+      payload = await fetchHistory(clampDaysBack(data.daysBack))
     } catch (e: any) {
       payload = {
         ok: false,

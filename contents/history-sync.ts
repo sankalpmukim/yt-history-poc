@@ -1,81 +1,78 @@
 /**
- * Isolated-world content script (the orchestrator).
+ * Isolated-world content script (the thin client).
  *
  * On every YouTube page open (and on SPA navigations, throttled):
- *   1. asks the MAIN-world fetcher for the last 2 days of watch history
- *   2. merges the result into chrome.storage.local (dedupe by videoId,
- *      keep firstSeenAt, refresh dayLabel/lastSeenAt)
- *   3. prunes anything not seen in the latest fetch AND first seen > 48h ago
- *      (so storage never holds anything older than the 2-day window)
- *   4. renders a small overlay with the count + recent entries for easy POC
- *      verification, and logs details to the console.
+ *   1. injects the MAIN-world fetcher/observer via a <script src> tag
+ *   2. asks it for the history inside the configured lookback window
+ *   3. forwards the RAW sections to the service worker, which is the single
+ *      writer that merges them into chrome.storage.local (multi-tab safe)
+ *   4. console logs the outcome; a small overlay exists only when the
+ *      debugOverlay setting is on (default off — sync must not disrupt)
  */
 
 import type { PlasmoCSConfig } from "plasmo"
 import mainWorldUrl from "url:./history-main"
-import type {
-  FetchResult,
-  StoreShape,
-  StoredEntry
-} from "../utils/history-types"
-import { STORAGE_KEY, RETENTION_MS, emptyStore } from "../utils/history-types"
+import type { FetchResult } from "../utils/history-types"
+import type { Settings } from "../core/types"
+import { KEYS } from "../core/types"
 
 export const config: PlasmoCSConfig = {
   matches: ["*://*.youtube.com/*"],
   run_at: "document_idle"
 }
 
-const MSG_SOURCE = "yt-history-poc"
-const REQ_TYPE = "YT_HISTORY_POC_FETCH_REQUEST"
-const RES_TYPE = "YT_HISTORY_POC_FETCH_RESPONSE"
-const READY_TYPE = "YT_HISTORY_POC_MAIN_READY"
+const MSG_SOURCE = "yt-ledger"
+const REQ_TYPE = "YT_LEDGER_FETCH_REQUEST"
+const RES_TYPE = "YT_LEDGER_FETCH_RESPONSE"
+const READY_TYPE = "YT_LEDGER_MAIN_READY"
 
 const SYNC_THROTTLE_MS = 60_000
 const FETCH_TIMEOUT_MS = 30_000
+const DEFAULT_DAYS_BACK = 14
 
 let lastSyncStartedAt = 0
 let inFlight = false
+let settingsCache: Settings | null = null
 
 /* ------------------------------------------------------------------ */
-/* storage                                                             */
+/* settings (read-only mirror of yl.v2.meta)                           */
 /* ------------------------------------------------------------------ */
 
-async function readStore(): Promise<StoreShape> {
+async function readSettings(): Promise<Settings | null> {
+  if (settingsCache) return settingsCache
   try {
-    const bag = await chrome.storage.local.get(STORAGE_KEY)
-    const store = bag?.[STORAGE_KEY]
-    if (store && store.version === 1 && store.entries) return store as StoreShape
+    const bag = await chrome.storage.local.get(KEYS.meta)
+    const s = bag?.[KEYS.meta]?.settings
+    if (s) {
+      settingsCache = s as Settings
+      return settingsCache
+    }
   } catch {}
-  return emptyStore()
+  return null
 }
 
-async function writeStore(store: StoreShape): Promise<void> {
-  await chrome.storage.local.set({ [STORAGE_KEY]: store })
-}
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return
+  const meta = changes[KEYS.meta]
+  if (meta) settingsCache = meta.newValue?.settings ?? null
+})
 
 /* ------------------------------------------------------------------ */
 /* inject the MAIN-world script (classic <script src> pattern)         */
 /* ------------------------------------------------------------------ */
 
-/**
- * The service-worker `registerContentScripts(world: "MAIN")` route proved
- * unreliable in this browser, so the isolated script injects the MAIN-world
- * fetcher itself via a script tag. The `url:` import makes Plasmo expose
- * the file through web_accessible_resources automatically.
- */
 function injectMainWorldScript(): void {
   const w = window as any
-  if (w.__YT_HISTORY_POC_MAIN_INJECTED__) return
-  w.__YT_HISTORY_POC_MAIN_INJECTED__ = true
+  if (w.__YT_LEDGER_MAIN_INJECTED__) return
+  w.__YT_LEDGER_MAIN_INJECTED__ = true
   try {
     const s = document.createElement("script")
     s.src = mainWorldUrl
     s.async = false
-    s.onerror = () => console.error("[yt-history-poc] main-world script tag failed to load", mainWorldUrl)
+    s.onerror = () => console.error("[yt-ledger] main-world script tag failed to load", mainWorldUrl)
     ;(document.head || document.documentElement).appendChild(s)
-    console.info("[yt-history-poc] main-world script injected:", mainWorldUrl)
   } catch (e) {
-    console.error("[yt-history-poc] main-world injection failed:", e)
+    console.error("[yt-ledger] main-world injection failed:", e)
   }
 }
 
@@ -83,7 +80,7 @@ function injectMainWorldScript(): void {
 /* talk to the MAIN-world fetcher                                      */
 /* ------------------------------------------------------------------ */
 
-function requestHistory(): Promise<FetchResult> {
+function requestHistory(daysBack: number): Promise<FetchResult> {
   return new Promise((resolve) => {
     const id = Math.random().toString(36).slice(2)
 
@@ -116,66 +113,24 @@ function requestHistory(): Promise<FetchResult> {
     }
 
     window.addEventListener("message", onMessage)
-    window.postMessage({ source: MSG_SOURCE, type: REQ_TYPE, id }, window.location.origin)
+    window.postMessage({ source: MSG_SOURCE, type: REQ_TYPE, id, daysBack }, window.location.origin)
   })
 }
 
 /* ------------------------------------------------------------------ */
-/* merge + prune                                                       */
+/* debug overlay (off by default; setting-controlled)                  */
 /* ------------------------------------------------------------------ */
 
-function mergeIntoStore(store: StoreShape, result: FetchResult): StoreShape {
-  const nowIso = new Date().toISOString()
-  const entries: Record<string, StoredEntry> = { ...store.entries }
-  const freshIds = new Set<string>()
-
-  if (result.ok) {
-    for (const section of result.sections) {
-      for (const item of section.items) {
-        freshIds.add(item.videoId)
-        const prev = entries[item.videoId]
-        entries[item.videoId] = {
-          ...item,
-          dayLabel: section.dayLabel,
-          firstSeenAt: prev?.firstSeenAt ?? nowIso,
-          lastSeenAt: nowIso
-        }
-      }
-    }
+async function renderDebugOverlay(status: string): Promise<void> {
+  const settings = await readSettings()
+  let el = document.getElementById("yt-ledger-debug-overlay")
+  if (!settings?.debugOverlay) {
+    el?.remove()
+    return
   }
-
-  // Prune: drop entries that were not in the latest fetch and were first
-  // seen more than RETENTION_MS ago — nothing older than the 2-day window
-  // is ever retained.
-  for (const id of Object.keys(entries)) {
-    const e = entries[id]
-    const age = Date.now() - new Date(e.firstSeenAt).getTime()
-    if (!freshIds.has(id) && age > RETENTION_MS) {
-      delete entries[id]
-    }
-  }
-
-  const status = result.ok
-    ? `ok · ${result.meta.pagesFetched} page(s) · stopped: ${result.meta.stoppedBecause} · ${Object.keys(entries).length} cached`
-    : `error: ${result.meta.error ?? "unknown"}`
-
-  return {
-    version: 1,
-    lastSyncedAt: nowIso,
-    lastSyncStatus: status,
-    entries
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* overlay (POC visualization)                                         */
-/* ------------------------------------------------------------------ */
-
-function ensureOverlay(): HTMLDivElement {
-  let el = document.getElementById("yt-history-poc-overlay") as HTMLDivElement | null
   if (!el) {
     el = document.createElement("div")
-    el.id = "yt-history-poc-overlay"
+    el.id = "yt-ledger-debug-overlay"
     Object.assign(el.style, {
       position: "fixed",
       right: "16px",
@@ -193,94 +148,14 @@ function ensureOverlay(): HTMLDivElement {
     } satisfies Partial<CSSStyleDeclaration>)
     document.documentElement.appendChild(el)
   }
-  return el
-}
-
-function renderOverlay(store: StoreShape, busy: boolean) {
-  const el = ensureOverlay()
-
-  // wipe
-  while (el.firstChild) el.removeChild(el.firstChild)
-
-  const details = document.createElement("details")
-  details.open = true
-
-  const summary = document.createElement("summary")
-  summary.style.cursor = "pointer"
-  summary.style.fontWeight = "700"
-  summary.textContent = `📺 YT History POC — ${Object.keys(store.entries).length} videos (last 2 days)`
-  details.appendChild(summary)
-
-  const meta = document.createElement("div")
-  meta.style.color = "#aaa"
-  meta.style.margin = "4px 0 6px"
-  const last = store.lastSyncedAt ? new Date(store.lastSyncedAt).toLocaleTimeString() : "—"
-  meta.textContent = `${busy ? "⏳ syncing…" : "✓"} last sync ${last} · ${store.lastSyncStatus}`
-  details.appendChild(meta)
-
-  const list = document.createElement("div")
-  list.style.maxHeight = "220px"
-  list.style.overflowY = "auto"
-
-  const sorted = Object.values(store.entries).sort((a, b) =>
-    b.lastSeenAt.localeCompare(a.lastSeenAt)
-  )
-  for (const e of sorted.slice(0, 10)) {
-    const row = document.createElement("div")
-    row.style.marginBottom = "4px"
-
-    const day = document.createElement("span")
-    day.style.color = "#fc0"
-    day.style.marginRight = "6px"
-    day.textContent = `[${e.dayLabel}]`
-    row.appendChild(day)
-
-    const title = document.createElement("a")
-    title.href = e.url
-    title.target = "_blank"
-    title.rel = "noreferrer"
-    title.style.color = "#3ea6ff"
-    title.style.textDecoration = "none"
-    title.textContent = e.title || e.videoId
-    row.appendChild(title)
-
-    if (e.channel) {
-      const ch = document.createElement("span")
-      ch.style.color = "#aaa"
-      ch.textContent = ` — ${e.channel}`
-      row.appendChild(ch)
-    }
-    if (e.watchState) {
-      const ws = document.createElement("span")
-      ws.style.color = "#2ba640"
-      ws.textContent = ` (${e.watchState})`
-      row.appendChild(ws)
-    }
-    list.appendChild(row)
-  }
-
-  if (sorted.length > 10) {
-    const more = document.createElement("div")
-    more.style.color = "#aaa"
-    more.textContent = `…and ${sorted.length - 10} more`
-    list.appendChild(more)
-  }
-  if (sorted.length === 0) {
-    const none = document.createElement("div")
-    none.style.color = "#aaa"
-    none.textContent = busy ? "fetching…" : "no entries in the last 2 days"
-    list.appendChild(none)
-  }
-
-  details.appendChild(list)
-  el.appendChild(details)
+  el.textContent = `📊 YT Ledger — ${status}`
 }
 
 /* ------------------------------------------------------------------ */
 /* sync                                                                */
 /* ------------------------------------------------------------------ */
 
-async function sync(reason: string) {
+async function sync(reason: string, daysBackOverride?: number): Promise<void> {
   if (inFlight) return
   const since = Date.now() - lastSyncStartedAt
   if (since < SYNC_THROTTLE_MS && reason !== "force") return
@@ -288,53 +163,41 @@ async function sync(reason: string) {
   inFlight = true
   lastSyncStartedAt = Date.now()
   try {
-    console.info(`[yt-history-poc] sync('${reason}') starting v3-lockupfix`)
-    const before = await readStore()
-    renderOverlay(before, true)
-    console.info(`[yt-history-poc] sync (${reason}) — merging into ${Object.keys(before.entries).length} cached entries`)
+    const settings = await readSettings()
+    const raw = daysBackOverride ?? settings?.fetchWindowDays ?? DEFAULT_DAYS_BACK
+    const daysBack = Math.min(90, Math.max(1, Math.round(raw) || DEFAULT_DAYS_BACK))
+    console.info(`[yt-ledger] sync('${reason}') starting — daysBack=${daysBack}`)
 
-    const result = await requestHistory()
-    console.info(`[yt-history-poc] requestHistory done: ok=${result.ok} meta=${JSON.stringify(result.meta)}`)
-    const merged = mergeIntoStore(before, result)
-    await writeStore(merged)
-    console.info(`[yt-history-poc] store written (${Object.keys(merged.entries).length} entries)`)
-    renderOverlay(merged, false)
+    const result = await requestHistory(daysBack)
+    const sectionSummary =
+      result.sections.map((s) => `${s.dayLabel}(${s.items.length})`).join(", ") || "(none)"
+    console.info(
+      `[yt-ledger] fetch ok=${result.ok} meta=${JSON.stringify(result.meta)} — sections: ${sectionSummary}`
+    )
 
-    // TEMP POC debug: meta only (raw-dump chunks removed).
+    if (!result.ok) {
+      console.warn(`[yt-ledger] fetch failed: ${result.meta.error ?? "unknown"}`)
+      await renderDebugOverlay(`sync failed: ${result.meta.error ?? "unknown"}`)
+      return
+    }
+
+    let response: any = null
     try {
-      chrome.storage.local.set({
-        "yt-history-poc:meta": JSON.stringify(result.meta)
+      response = await chrome.runtime.sendMessage({
+        type: "yl.syncResult",
+        sections: result.sections,
+        fetchMeta: result.meta,
+        fetchedAt: result.fetchedAt
       })
-    } catch {}
-
-    // TEMP POC debug: surface the outcome in the tab title.
-    try {
-      const tag = `|S:${result.ok ? "ok" : "err"}:${result.meta.stoppedBecause}:${Object.keys(merged.entries).length}e`
-      document.title = `${document.title} ${tag}`.slice(0, 180)
-    } catch {}
-
-    console.info(
-      `[yt-history-poc] fetch meta: ${JSON.stringify(result.meta)} result.ok=${result.ok}`
-    )
-    console.info(
-      `[yt-history-poc] sections: ` +
-        (result.sections.map((s) => `${s.dayLabel}(${s.items.length})`).join(", ") || "(none)")
-    )
-    console.info(
-      `[yt-history-poc] stored ${Object.keys(merged.entries).length} entries (last 2 days)`
-    )
+    } catch (e) {
+      console.warn("[yt-ledger] forwarding sections to service worker failed:", e)
+    }
+    const status = response?.status ?? "sent (no response)"
+    console.info(`[yt-ledger] ${status}`)
+    await renderDebugOverlay(status)
   } catch (e: any) {
-    console.error(
-      `[yt-history-poc] sync failed:`,
-      String(e),
-      "|msg:",
-      e?.message ?? "",
-      "|stack:",
-      String(e?.stack ?? "").slice(0, 500)
-    )
-    const store = await readStore()
-    store.lastSyncStatus = `error: ${String(e?.message ?? e)}`
-    renderOverlay(store, false)
+    console.error("[yt-ledger] sync failed:", e)
+    await renderDebugOverlay(`error: ${e?.message ?? String(e)}`)
   } finally {
     inFlight = false
   }
@@ -363,7 +226,7 @@ setTimeout(() => {
 // YouTube is an SPA — re-sync on internal navigation, throttled.
 window.addEventListener("yt-navigate-finish", () => void sync("spa-navigate"))
 
-// expose a manual trigger for devtools: window.__YT_HISTORY_POC_SYNC()
-;(window as any).__YT_HISTORY_POC_SYNC = () => sync("force")
+// manual trigger for devtools: window.__YT_LEDGER_SYNC() or __YT_LEDGER_SYNC(30)
+;(window as any).__YT_LEDGER_SYNC = (daysBack?: number) => sync("force", daysBack)
 
 export {}

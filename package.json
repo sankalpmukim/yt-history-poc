@@ -1,23 +1,25 @@
 {
-  "name": "yt-history-poc",
-  "displayName": "YT History POC",
-  "version": "0.1.0",
-  "description": "POC: reads your own YouTube watch history (last 2 days) via the page's innertube API and caches it locally.",
+  "name": "yt-ledger",
+  "displayName": "YT Ledger",
+  "version": "0.2.0",
+  "description": "An expense manager for your YouTube watch history — categorize what you watch, see where the time goes, budget it. Local-only.",
   "private": true,
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",
-    "package": "plasmo package"
+    "package": "plasmo package",
+    "test": "rm -rf .test && esbuild core/*.test.ts --bundle --platform=node --format=esm --outdir=.test && node --test .test/"
   },
   "dependencies": {
     "plasmo": "0.90.5"
   },
   "devDependencies": {
     "@types/chrome": "0.3.7",
+    "esbuild": "0.18.20",
     "typescript": "^5.5.0"
   },
   "manifest": {
-    "permissions": ["storage"],
+    "permissions": ["storage", "scripting", "unlimitedStorage"],
     "host_permissions": ["*://*.youtube.com/*", "http://127.0.0.1:8742/*"]
   },
   "pnpm": {

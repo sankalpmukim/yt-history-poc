@@ -1,4 +1,20 @@
-# yt-history-poc
+# yt-history-poc → YT Ledger
+
+**This repo is becoming "YT Ledger"** — an expense manager for your own
+YouTube watch history (watch events = transactions, categories = spending
+categories, value scores = the inverse of cost, budgets = time budgets).
+See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
+
+**Status: M1 complete** — v2 data layer (events with occurrences + monthly
+shards, videos, categories, rules, settings), single-writer merge in the
+service worker, v1→v2 migration, retention pruning (default 365d, was 48h),
+14-day automatic sync window (was 2), duration capture from history
+thumbnails, and a read-only fetch observer in the MAIN world so lookback can
+go deeper than the first page (as the user scrolls history). The original POC
+behavior (sync on every YouTube visit via `/feed/history`'s `ytInitialData`)
+is preserved.
+
+## Legacy POC description
 
 Proof of concept: a Plasmo (MV3) browser extension that reads **your own**
 YouTube watch history for the **last two days**, caches it in
@@ -102,11 +118,17 @@ pnpm build          # → build/chrome-mv3-prod
 
 ## Verification shortcuts
 
-- Console (page context): filter `yt-history-poc` — shows sync flow,
-  sections, stored count.
-- `window.__YT_HISTORY_POC_SYNC()` in the page console forces a re-sync.
-- `chrome.storage.local.get("ytHistoryPoc.v1")` in the SW console dumps
-  the cache.
+- Unit tests for the core logic: `pnpm test` (merge/migrate/estimate/
+  retention/duration/ledger — 33 tests, node + esbuild, no browser needed).
+- Console (page context): filter `yt-ledger` — shows sync flow, sections,
+  stored-event summary from the service worker.
+- `window.__YT_LEDGER_SYNC()` in the page console forces a re-sync;
+  `window.__YT_LEDGER_SYNC(30)` forces one with a 30-day lookback.
+- Service-worker console: `chrome.storage.local.get(null, console.dir)` —
+  the v2 keys are `yl.v2.meta`, `yl.v2.videos`, `yl.v2.events.<YYYY-MM>`,
+  `yl.v2.categories`, `yl.v2.rules`, `yl.v2.durationQueue`.
+- A small on-page debug overlay can be enabled with
+  `settings.debugOverlay` in `yl.v2.meta` (off by default).
 
 ## Known limitations
 
