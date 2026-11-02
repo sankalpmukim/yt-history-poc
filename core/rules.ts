@@ -107,6 +107,20 @@ export function effectiveCategoryId(
   return video.categoryOverride ?? video.autoCategoryId ?? null
 }
 
+/** Human-readable summary of a rule's conditions (used by the rules UI). */
+export function describeMatch(m: RuleMatch): string {
+  const parts: string[] = []
+  if (m.channelEquals) parts.push(`channel is “${m.channelEquals}”`)
+  if (m.channelContains) parts.push(`channel contains “${m.channelContains}”`)
+  if (m.titleContains && m.titleContains.length > 0)
+    parts.push(`title contains ${m.titleContains.map((t) => `“${t}”`).join(" or ")}`)
+  if (m.titleRegex) parts.push(`title matches /${m.titleRegex}/${m.titleRegexFlags ?? ""}`)
+  if (m.isShort === true) parts.push("is a Short")
+  if (m.isShort === false) parts.push("not a Short")
+  if (m.maxDurationSec != null) parts.push(`duration ≤ ${m.maxDurationSec}s`)
+  return parts.length > 0 ? parts.join(" and ") : "matches everything"
+}
+
 /**
  * How many stored videos a rule (or rule list) would currently match — used
  * by the rule editor's test-run (M5). Pure; does not assign anything.

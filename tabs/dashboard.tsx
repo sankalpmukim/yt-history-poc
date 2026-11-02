@@ -9,6 +9,9 @@ import { CSS } from "./lib/styles"
 import { APP_VERSION } from "../core/version"
 import { OverviewView } from "./views/overview"
 import { LedgerView } from "./views/ledger"
+import { RulesView } from "./views/rules"
+import { CategoriesView } from "./views/categories"
+import { SettingsView } from "./views/settings"
 import { PlaceholderView } from "./views/placeholder"
 
 interface RouteDef {
@@ -20,16 +23,8 @@ interface RouteDef {
 const ROUTES: RouteDef[] = [
   { id: "overview", label: "📊 Overview", el: (p) => <OverviewView {...p} /> },
   { id: "ledger", label: "🧾 Ledger", el: (p) => <LedgerView {...p} /> },
-  {
-    id: "rules",
-    label: "⚖️ Rules",
-    el: () => <PlaceholderView title="Rules" note="Rules UI lands in M5." />
-  },
-  {
-    id: "categories",
-    label: "🏷️ Categories",
-    el: () => <PlaceholderView title="Categories" note="Category manager lands in M5." />
-  },
+  { id: "rules", label: "⚖️ Rules", el: (p) => <RulesView {...p} /> },
+  { id: "categories", label: "🏷️ Categories", el: (p) => <CategoriesView {...p} /> },
   {
     id: "insights",
     label: "🔍 Insights",
@@ -40,11 +35,7 @@ const ROUTES: RouteDef[] = [
     label: "⏱️ Budgets",
     el: () => <PlaceholderView title="Budgets" note="Budgets land in M7." />
   },
-  {
-    id: "settings",
-    label: "⚙️ Settings",
-    el: () => <PlaceholderView title="Settings" note="Settings land in M5." />
-  }
+  { id: "settings", label: "⚙️ Settings", el: (p) => <SettingsView {...p} /> }
 ]
 
 function useHashRoute(): [string, (id: string) => void] {

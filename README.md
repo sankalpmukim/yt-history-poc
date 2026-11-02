@@ -5,6 +5,18 @@ YouTube watch history (watch events = transactions, categories = spending
 categories, value scores = the inverse of cost, budgets = time budgets).
 See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
 
+**Status: M5 complete** — everything in M4 plus the **Rules UI** (ordered
+list with enable/reorder/delete, hit counts, dead/archive warnings; full
+editor for channel equals/contains, title any-of, title regex + flags,
+Shorts-ness, duration bound, priority; **test-run** showing how many stored
+videos a rule would match before saving), the **Categories manager** (the
+0–5 value ladder: emoji/color/name/score editing, add, archive, reorder,
+per-category rule counts), and **Settings**: **Refresh / Sync now** anytime
+with a lookback picker (7–90 days, presets + custom), automatic fetch
+window, retention (90d / 1 year / forever), budget-mode selector (active
+from M8), debug toggles, **JSON backup export/import** and **CSV ledger
+export**, and a wipe zone.
+
 **Status: M4 complete** — the **dashboard** is live: click the YT Ledger
 toolbar icon to open it (a full tab; no popup — see the known Plasmo/Node-26
 popup bug). It ships **Overview** (range picker Today/7/30/90/All; stat

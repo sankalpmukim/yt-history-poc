@@ -275,6 +275,16 @@ chrome.runtime.onMessage.addListener((msg: any, sender, sendResponse) => {
     return false
   }
 
+  if (msg?.type === "yl.manualSync") {
+    ;(async () => {
+      const fallback = await defaultFetchWindowDays()
+      const daysBack = clampDaysBack(msg.daysBack, fallback)
+      const status = await coordinateSync(daysBack, true) // manual = force
+      sendResponse({ ok: true, status: `manual sync (${daysBack}d): ${status}` })
+    })()
+    return true
+  }
+
   if (msg?.type === "yl.syncResult") {
     ;(async () => {
       if (syncBusy) {
