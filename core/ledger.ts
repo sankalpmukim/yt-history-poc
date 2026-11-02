@@ -131,3 +131,13 @@ export async function applySyncResult(
 
   return { ok: true, status, diagnostics: nextMeta.lastSyncDiagnostics }
 }
+
+/**
+ * Record a coordinator/diagnostic status line (e.g. "hidden tab opened")
+ * WITHOUT claiming a sync happened — lastSyncedAt stays untouched.
+ */
+export async function noteStatus(kv: KV, status: string): Promise<void> {
+  const meta = await readMeta(kv)
+  if (!meta) return
+  await kv.set({ [KEYS.meta]: { ...meta, lastSyncStatus: status } })
+}

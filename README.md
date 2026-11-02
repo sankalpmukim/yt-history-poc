@@ -5,6 +5,21 @@ YouTube watch history (watch events = transactions, categories = spending
 categories, value scores = the inverse of cost, budgets = time budgets).
 See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
 
+**Status: M2 complete** — everything in M1 plus:
+- **Sync coordinator**: a visit to any YouTube page that can't read history
+  itself (Brave strips auth from extension-initiated innertube calls) asks
+  the service worker to sync elsewhere — it pokes an existing
+  `/feed/history` tab if one is announced, else opens one **hidden tab**
+  (`active:false`) that auto-scrolls to load the lookback window, syncs,
+  acks, and is closed (one at a time, throttled to one coordinator run per
+  2 minutes; manual `__YT_LEDGER_SYNC(n)` bypasses the throttle). Leftover
+  hidden tabs from dead service workers are cleaned up on startup.
+- **Duration resolver**: videos without a duration are queued and backfilled
+  from public watch pages (`lengthSeconds` + Shorts page-type detection),
+  ≤15 fetches per run, 600ms apart, ≤3 attempts per video, cached forever.
+  Auto-scroll only ever runs in hidden tabs — the user's own scrolling is
+  never fought.
+
 **Status: M1 complete** — v2 data layer (events with occurrences + monthly
 shards, videos, categories, rules, settings), single-writer merge in the
 service worker, v1→v2 migration, retention pruning (default 365d, was 48h),
@@ -119,14 +134,20 @@ pnpm build          # → build/chrome-mv3-prod
 ## Verification shortcuts
 
 - Unit tests for the core logic: `pnpm test` (merge/migrate/estimate/
-  retention/duration/ledger — 33 tests, node + esbuild, no browser needed).
+  retention/duration/resolve/ledger — 43 tests, node + esbuild, no browser
+  needed).
 - Console (page context): filter `yt-ledger` — shows sync flow, sections,
   stored-event summary from the service worker.
+- Visit `youtube.com` (any page, NOT the history feed): within a few seconds
+  the console shows `coordinator: hidden tab N opened (14d lookback)` — a
+  background tab opens `/feed/history`, auto-scrolls, syncs, and closes.
 - `window.__YT_LEDGER_SYNC()` in the page console forces a re-sync;
-  `window.__YT_LEDGER_SYNC(30)` forces one with a 30-day lookback.
-- Service-worker console: `chrome.storage.local.get(null, console.dir)` —
-  the v2 keys are `yl.v2.meta`, `yl.v2.videos`, `yl.v2.events.<YYYY-MM>`,
-  `yl.v2.categories`, `yl.v2.rules`, `yl.v2.durationQueue`.
+  `window.__YT_LEDGER_SYNC(30)` forces one with a 30-day lookback (works
+  from any YouTube page — it goes through the coordinator).
+- Service-worker console (`brave://extensions` → YT Ledger → service
+  worker): watch for `duration resolver: +N resolved…`; the v2 keys are
+  `yl.v2.*` (meta, videos, events.<YYYY-MM>, categories, rules,
+  durationQueue/durationAttempts, syncState).
 - A small on-page debug overlay can be enabled with
   `settings.debugOverlay` in `yl.v2.meta` (off by default).
 

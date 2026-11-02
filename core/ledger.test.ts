@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { MemoryKV } from "./storage"
-import { ensureInitialized, applySyncResult } from "./ledger"
+import { ensureInitialized, applySyncResult, noteStatus } from "./ledger"
 import { pruneNow } from "./retention"
 import type { HistorySection, StoreShape } from "../utils/history-types"
 import { KEYS, eventsKey, eventKeyOf, dateKeyOf } from "./types"
@@ -152,4 +152,14 @@ test("pruneNow applies the retention setting end-to-end", async () => {
   assert.equal(removed.removedEvents, 1)
   const shard = await kv.get(eventsKey("2025-01"))
   assert.deepEqual(shard, {})
+})
+
+test("noteStatus records diagnostics without claiming a sync happened", async () => {
+  const kv = new MemoryKV()
+  await ensureInitialized(kv, NOW)
+  await noteStatus(kv, "syncing via hidden tab (lookback 14d)")
+  const meta = (await kv.get(KEYS.meta)) as any
+  assert.equal(meta.lastSyncStatus, "syncing via hidden tab (lookback 14d)")
+  assert.equal(meta.lastSyncedAt, null, "no merge happened — lastSyncedAt untouched")
+  assert.equal(meta.lastSyncDiagnostics, null)
 })

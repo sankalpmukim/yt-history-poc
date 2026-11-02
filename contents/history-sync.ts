@@ -4,17 +4,26 @@
  * On every YouTube page open (and on SPA navigations, throttled):
  *   1. injects the MAIN-world fetcher/observer via a <script src> tag
  *   2. asks it for the history inside the configured lookback window
- *   3. forwards the RAW sections to the service worker, which is the single
- *      writer that merges them into chrome.storage.local (multi-tab safe)
- *   4. console logs the outcome; a small overlay exists only when the
- *      debugOverlay setting is on (default off — sync must not disrupt)
+ *      (on /feed/history this reads ytInitialData + the fetch observer's
+ *      captured continuations)
+ *   3. when this tab is HIDDEN and on /feed/history (the service worker's
+ *      hidden sync tab), auto-scrolls first so the page itself loads enough
+ *      history to cover the lookback window
+ *   4. forwards the RAW sections to the service worker — the single writer
+ *      that merges them into chrome.storage.local (multi-tab safe)
+ *   5. on pages that can't read history themselves (Brave strips auth from
+ *      extension-initiated innertube calls), asks the SW coordinator to run
+ *      the sync elsewhere ("yl.visitNeedHelp")
+ *
+ * A small overlay exists only when the debugOverlay setting is on.
  */
 
 import type { PlasmoCSConfig } from "plasmo"
 import mainWorldUrl from "url:./history-main"
-import type { FetchResult } from "../utils/history-types"
+import type { FetchResult, HistorySection } from "../utils/history-types"
+import { dayLabelToDate } from "../utils/day"
+import { dateKeyOf } from "../core/types"
 import type { Settings } from "../core/types"
-import { KEYS } from "../core/types"
 
 export const config: PlasmoCSConfig = {
   matches: ["*://*.youtube.com/*"],
@@ -30,6 +39,12 @@ const SYNC_THROTTLE_MS = 60_000
 const FETCH_TIMEOUT_MS = 30_000
 const DEFAULT_DAYS_BACK = 14
 
+const SCROLL_MAX_MS = 20_000
+const SCROLL_STEP_MS = 400
+const SCROLL_MAX_STALLS = 6
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
 let lastSyncStartedAt = 0
 let inFlight = false
 let settingsCache: Settings | null = null
@@ -41,8 +56,8 @@ let settingsCache: Settings | null = null
 async function readSettings(): Promise<Settings | null> {
   if (settingsCache) return settingsCache
   try {
-    const bag = await chrome.storage.local.get(KEYS.meta)
-    const s = bag?.[KEYS.meta]?.settings
+    const bag = await chrome.storage.local.get("yl.v2.meta")
+    const s = bag?.["yl.v2.meta"]?.settings
     if (s) {
       settingsCache = s as Settings
       return settingsCache
@@ -53,9 +68,26 @@ async function readSettings(): Promise<Settings | null> {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return
-  const meta = changes[KEYS.meta]
+  const meta = changes["yl.v2.meta"]
   if (meta) settingsCache = meta.newValue?.settings ?? null
 })
+
+/* ------------------------------------------------------------------ */
+/* page state                                                          */
+/* ------------------------------------------------------------------ */
+
+function onHistoryPage(): boolean {
+  return location.pathname.startsWith("/feed/history")
+}
+
+async function announcePageState(): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage({
+      type: "yl.pageState",
+      onHistoryPage: onHistoryPage()
+    })
+  } catch {}
+}
 
 /* ------------------------------------------------------------------ */
 /* inject the MAIN-world script (classic <script src> pattern)         */
@@ -118,6 +150,64 @@ function requestHistory(daysBack: number): Promise<FetchResult> {
 }
 
 /* ------------------------------------------------------------------ */
+/* auto-scroll (hidden history tab only)                               */
+/* ------------------------------------------------------------------ */
+
+/** Count rendered history days + items from the DOM (defensive selectors). */
+function renderedDayCounts(): { days: number; items: number } {
+  const days = new Set<string>()
+  let items = 0
+  try {
+    const sections = document.querySelectorAll("ytd-item-section-renderer")
+    for (const sec of sections) {
+      const header = sec.querySelector("#header")
+      const label = (header?.textContent ?? "").trim().replace(/\s+/g, " ")
+      if (label) {
+        const d = dayLabelToDate(label, new Date())
+        if (d) days.add(dateKeyOf(d))
+      }
+      items += sec.querySelectorAll("ytd-video-renderer, ytd-lockup-view-model, [data-content-id]")
+        .length
+    }
+  } catch {}
+  return { days: days.size, items }
+}
+
+function coveredDays(sections: HistorySection[]): number {
+  const days = new Set<string>()
+  for (const s of sections) {
+    const d = dayLabelToDate(s.dayLabel, new Date())
+    if (d) days.add(dateKeyOf(d))
+  }
+  return days.size
+}
+
+/**
+ * Scroll the (hidden) history page until the rendered DOM covers the
+ * lookback window, content stops growing, or the time budget runs out.
+ * Scrolling makes YouTube's own code fetch continuations, which the MAIN
+ * world fetch observer captures. Never runs in a visible tab — the user's
+ * own scrolling is never fought.
+ */
+async function autoScrollForWindow(daysBack: number): Promise<void> {
+  const start = Date.now()
+  let lastItems = -1
+  let stalls = 0
+  while (Date.now() - start < SCROLL_MAX_MS) {
+    window.scrollTo(0, document.documentElement.scrollHeight)
+    await sleep(SCROLL_STEP_MS)
+    const { days, items } = renderedDayCounts()
+    if (days >= daysBack) break
+    if (items === lastItems) {
+      if (++stalls >= SCROLL_MAX_STALLS) break
+    } else {
+      stalls = 0
+      lastItems = items
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* debug overlay (off by default; setting-controlled)                  */
 /* ------------------------------------------------------------------ */
 
@@ -158,7 +248,7 @@ async function renderDebugOverlay(status: string): Promise<void> {
 async function sync(reason: string, daysBackOverride?: number): Promise<void> {
   if (inFlight) return
   const since = Date.now() - lastSyncStartedAt
-  if (since < SYNC_THROTTLE_MS && reason !== "force") return
+  if (since < SYNC_THROTTLE_MS && reason !== "force" && reason !== "sw-runSync") return
 
   inFlight = true
   lastSyncStartedAt = Date.now()
@@ -166,35 +256,68 @@ async function sync(reason: string, daysBackOverride?: number): Promise<void> {
     const settings = await readSettings()
     const raw = daysBackOverride ?? settings?.fetchWindowDays ?? DEFAULT_DAYS_BACK
     const daysBack = Math.min(90, Math.max(1, Math.round(raw) || DEFAULT_DAYS_BACK))
-    console.info(`[yt-ledger] sync('${reason}') starting — daysBack=${daysBack}`)
+    console.info(`[yt-ledger] sync('${reason}') starting — daysBack=${daysBack} on=${location.pathname}`)
 
-    const result = await requestHistory(daysBack)
+    let result = await requestHistory(daysBack)
+
+    // Hidden tab on the history page: auto-scroll so the page itself loads
+    // the full window, then re-request (the observer now has the depth).
+    if (onHistoryPage() && document.hidden && coveredDays(result.sections) < daysBack) {
+      console.info(`[yt-ledger] hidden tab: auto-scrolling to cover ${daysBack} day(s)…`)
+      await autoScrollForWindow(daysBack)
+      result = await requestHistory(daysBack)
+    }
+
     const sectionSummary =
       result.sections.map((s) => `${s.dayLabel}(${s.items.length})`).join(", ") || "(none)"
     console.info(
       `[yt-ledger] fetch ok=${result.ok} meta=${JSON.stringify(result.meta)} — sections: ${sectionSummary}`
     )
 
-    if (!result.ok) {
+    if (result.ok && (result.sections.length > 0 || onHistoryPage())) {
+      // authoritative result → forward for the merge
+      let response: any = null
+      try {
+        response = await chrome.runtime.sendMessage({
+          type: "yl.syncResult",
+          sections: result.sections,
+          fetchMeta: result.meta,
+          fetchedAt: result.fetchedAt
+        })
+      } catch (e) {
+        console.warn("[yt-ledger] forwarding sections to service worker failed:", e)
+      }
+      const status = response?.status ?? "sent (no response)"
+      console.info(`[yt-ledger] ${status}`)
+      await renderDebugOverlay(status)
+    } else if (result.ok) {
+      // Non-history page that couldn't read history itself (Brave strips
+      // auth from extension-initiated innertube calls). Ask the coordinator
+      // to sync via an existing history tab or a hidden one.
+      try {
+        const r = await chrome.runtime.sendMessage({
+          type: "yl.visitNeedHelp",
+          daysBack,
+          force: reason === "force",
+          url: location.href
+        })
+        const status = r?.status ?? "no coordinator response"
+        console.info(`[yt-ledger] coordinator: ${status}`)
+        await renderDebugOverlay(`coordinator: ${status}`)
+      } catch (e) {
+        console.warn("[yt-ledger] coordinator unreachable:", e)
+      }
+    } else {
       console.warn(`[yt-ledger] fetch failed: ${result.meta.error ?? "unknown"}`)
       await renderDebugOverlay(`sync failed: ${result.meta.error ?? "unknown"}`)
-      return
     }
 
-    let response: any = null
-    try {
-      response = await chrome.runtime.sendMessage({
-        type: "yl.syncResult",
-        sections: result.sections,
-        fetchMeta: result.meta,
-        fetchedAt: result.fetchedAt
-      })
-    } catch (e) {
-      console.warn("[yt-ledger] forwarding sections to service worker failed:", e)
+    // ack for the coordinator so the hidden tab can be closed promptly
+    if (onHistoryPage() && document.hidden) {
+      try {
+        await chrome.runtime.sendMessage({ type: "yl.hiddenTabDone", ok: result.ok })
+      } catch {}
     }
-    const status = response?.status ?? "sent (no response)"
-    console.info(`[yt-ledger] ${status}`)
-    await renderDebugOverlay(status)
   } catch (e: any) {
     console.error("[yt-ledger] sync failed:", e)
     await renderDebugOverlay(`error: ${e?.message ?? String(e)}`)
@@ -209,22 +332,34 @@ async function sync(reason: string, daysBackOverride?: number): Promise<void> {
 
 // MAIN-world script may still be initializing; a short delay before the first
 // sync avoids a wasted timeout round-trip.
-let mainReady = false
 window.addEventListener("message", (ev: MessageEvent) => {
   if (ev.source !== window) return
   if (ev.data?.source === MSG_SOURCE && ev.data?.type === READY_TYPE) {
-    mainReady = true
+    // main world ready — nothing to do; sync is already scheduled
   }
 })
 
 setTimeout(() => {
   injectMainWorldScript()
+  void announcePageState()
   // give the injected script a moment to attach its listener before asking
   setTimeout(() => void sync("initial"), 600)
 }, 200)
 
 // YouTube is an SPA — re-sync on internal navigation, throttled.
-window.addEventListener("yt-navigate-finish", () => void sync("spa-navigate"))
+window.addEventListener("yt-navigate-finish", () => {
+  void announcePageState()
+  void sync("spa-navigate")
+})
+
+// the service worker pokes existing history tabs this way
+chrome.runtime.onMessage.addListener((msg: any, _sender, sendResponse) => {
+  if (msg?.type === "yl.runSync") {
+    void sync("sw-runSync", typeof msg.daysBack === "number" ? msg.daysBack : undefined)
+    sendResponse({ ok: true })
+  }
+  return false
+})
 
 // manual trigger for devtools: window.__YT_LEDGER_SYNC() or __YT_LEDGER_SYNC(30)
 ;(window as any).__YT_LEDGER_SYNC = (daysBack?: number) => sync("force", daysBack)

@@ -124,7 +124,9 @@ export const KEYS = {
   categories: "yl.v2.categories",
   rules: "yl.v2.rules",
   durationQueue: "yl.v2.durationQueue",
-  budgetStatus: "yl.v2.budgetStatus"
+  durationAttempts: "yl.v2.durationAttempts",
+  budgetStatus: "yl.v2.budgetStatus",
+  syncState: "yl.v2.syncState"
 } as const
 
 /** storage key for a monthly event shard; month = "YYYY-MM" */

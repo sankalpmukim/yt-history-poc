@@ -29,3 +29,25 @@ export function parseProgressPct(watchState: string | null | undefined): number 
   if (isNaN(pct) || pct < 0 || pct > 100) return null
   return pct
 }
+
+/**
+ * Extract lengthSeconds from a watch-page HTML payload
+ * (ytInitialPlayerResponse → videoDetails.lengthSeconds).
+ */
+export function extractLengthSeconds(html: string): number | null {
+  const m = /"lengthSeconds":"(\d+)"/.exec(html)
+  if (!m) return null
+  const n = parseInt(m[1], 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/**
+ * Detect whether a watch page is a Shorts page (canonical /shorts/ URL →
+ * WEB_PAGE_TYPE_SHORTS). Returns null when the page type can't be determined
+ * (e.g. a consent interstitial or an error page).
+ */
+export function extractIsShort(html: string): boolean | null {
+  if (/"webPageType":"WEB_PAGE_TYPE_SHORTS"/.test(html)) return true
+  if (/"webPageType":"WEB_PAGE_TYPE_WATCH"/.test(html)) return false
+  return null
+}
