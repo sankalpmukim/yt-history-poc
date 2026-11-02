@@ -75,6 +75,11 @@ export function validateBackup(json: unknown): BackupShape {
   return b as BackupShape
 }
 
+/** Parse pasted backup text through the exact same validation used by imports. */
+export function parseBackupJson(text: string): BackupShape {
+  return validateBackup(text)
+}
+
 /** Group flat backup events into monthly shards ready for storage writes. */
 export function backupToShards(backup: BackupShape): Record<string, Record<string, WatchEvent>> {
   const shards: Record<string, Record<string, WatchEvent>> = {}

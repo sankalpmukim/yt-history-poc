@@ -6,7 +6,7 @@ import { patchSettings, settingsOf } from "../lib/data"
 import { loadLedgerData } from "../lib/data"
 import { ChromeKV } from "../../core/storage"
 import { ensureInitialized } from "../../core/ledger"
-import { buildBackup, buildCsv, validateBackup, backupToShards, isLedgerKey } from "../../core/exports"
+import { buildBackup, buildCsv, parseBackupJson, backupToShards, isLedgerKey } from "../../core/exports"
 import { KEYS, eventsKey, isEventsKey } from "../../core/types"
 import { APP_VERSION } from "../../core/version"
 import { BudgetModeControl } from "../lib/ui"
@@ -21,6 +21,7 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
   const [lookback, setLookback] = useState<number>(settings.fetchWindowDays || 14)
   const [customLookback, setCustomLookback] = useState<string>("")
   const [importMsg, setImportMsg] = useState<string>("")
+  const [pastedJson, setPastedJson] = useState<string>("")
   const fileRef = useRef<HTMLInputElement>(null)
   const [confirmWipe, setConfirmWipe] = useState(false)
 
@@ -37,7 +38,7 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
     }
   }
 
-  const exportJson = async () => {
+  const exportJsonText = async (): Promise<string> => {
     const fresh = await loadLedgerData()
     const backup = buildBackup({
       meta: fresh.meta,
@@ -48,11 +49,26 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
       events: fresh.events,
       now: new Date()
     })
+    return JSON.stringify(backup, null, 2)
+  }
+
+  const exportJson = async () => {
+    const json = await exportJsonText()
     download(
       `yt-ledger-backup-${new Date().toISOString().slice(0, 10)}.json`,
-      JSON.stringify(backup, null, 2),
+      json,
       "application/json"
     )
+  }
+
+  const copyExportJson = async () => {
+    try {
+      const json = await exportJsonText()
+      await navigator.clipboard.writeText(json)
+      setImportMsg(`Copied JSON backup to clipboard (${json.length.toLocaleString()} characters).`)
+    } catch (e: any) {
+      setImportMsg(`clipboard copy failed: ${e?.message ?? String(e)}`)
+    }
   }
 
   const exportCsv = async () => {
@@ -70,11 +86,10 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
     )
   }
 
-  const importJson = async (file: File) => {
+  const importJsonText = async (text: string) => {
     setImportMsg("reading…")
     try {
-      const text = await file.text()
-      const backup = validateBackup(text)
+      const backup = parseBackupJson(text)
       const shards = backupToShards(backup)
       const confirmation = window.confirm(
         "Import replaces the current YT Ledger videos, events, categories, subcategories, rules, and settings. Export a backup first if you want to keep them. Continue?"
@@ -99,6 +114,14 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
         `restored ${Object.keys(backup.data.videos).length} video(s), ${Object.keys(backup.data.events).length} event(s), ${backup.data.rules.length} rule(s)`
       )
       await reload()
+    } catch (e: any) {
+      setImportMsg(`import failed: ${e?.message ?? String(e)}`)
+    }
+  }
+
+  const importJsonFile = async (file: File) => {
+    try {
+      await importJsonText(await file.text())
     } catch (e: any) {
       setImportMsg(`import failed: ${e?.message ?? String(e)}`)
     }
@@ -224,6 +247,7 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
         <h2>Data</h2>
         <div className="row" style={{ marginBottom: 10 }}>
           <button className="btn" onClick={() => void exportJson()}>⬇ Export JSON backup</button>
+          <button className="btn" onClick={() => void copyExportJson()}>Copy export JSON to clipboard</button>
           <button className="btn" onClick={() => void exportCsv()}>⬇ Export CSV ledger</button>
           <button className="btn" onClick={() => fileRef.current?.click()}>⬆ Import JSON</button>
           <button
@@ -239,7 +263,7 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
             ref={fileRef} type="file" accept="application/json" style={{ display: "none" }}
             onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f) void importJson(f)
+              if (f) void importJsonFile(f)
               e.target.value = ""
             }}
           />
@@ -248,7 +272,28 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
           Import replaces the current ledger, including existing event shards. Export a backup first.
           A deterministic QA seed is available at <code>fixtures/qa-seed.json</code>.
         </div>
-        {importMsg ? <div className="small" style={{ marginBottom: 8 }}>{importMsg}</div> : null}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+          <label htmlFor="pasted-backup-json" className="small">Import from pasted JSON</label>
+          <textarea
+            id="pasted-backup-json"
+            aria-label="Import from pasted JSON"
+            rows={8}
+            value={pastedJson}
+            onChange={(e) => setPastedJson(e.target.value)}
+            placeholder="Paste a YT Ledger JSON backup or QA seed here…"
+            style={{ width: "100%", boxSizing: "border-box", fontFamily: "monospace", resize: "vertical" }}
+          />
+          <button
+            className="btn btn-primary"
+            disabled={!pastedJson.trim()}
+            aria-label="Import pasted JSON"
+            onClick={() => void importJsonText(pastedJson)}
+            style={{ alignSelf: "flex-start" }}
+          >
+            Import pasted JSON
+          </button>
+        </div>
+        {importMsg ? <div className="small" role="status" aria-live="polite" style={{ marginBottom: 8 }}>{importMsg}</div> : null}
         <div className="row">
           {confirmWipe ? (
             <>

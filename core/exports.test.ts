@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { buildBackup, validateBackup, backupToShards, buildCsv } from "./exports"
+import { buildBackup, validateBackup, parseBackupJson, backupToShards, buildCsv } from "./exports"
 import { describeMatch } from "./rules"
 import type { Category, VideoRecord, WatchEvent, MetaState } from "./types"
 import { eventKeyOf } from "./types"
@@ -100,6 +100,23 @@ test("validateBackup rejects garbage and foreign payloads", () => {
       }),
     /event entries invalid/
   )
+})
+
+test("parseBackupJson accepts pasted JSON and uses standard backup validation", () => {
+  const backup = buildBackup({
+    meta: null,
+    categories: CATS,
+    subcategories: [{ id: "fun-music", parentId: "fun", name: "Music", emoji: "🎵", order: 0 }],
+    rules: [],
+    videos: { a: video("a") },
+    events: [event("a", "2026-11-01")],
+    now: NOW
+  })
+  const parsed = parseBackupJson(JSON.stringify(backup))
+  assert.equal(parsed.app, "yt-ledger")
+  assert.equal(parsed.data.subcategories?.[0].id, "fun-music")
+  assert.throws(() => parseBackupJson("{bad json"), /not valid JSON/)
+  assert.throws(() => parseBackupJson(JSON.stringify({ app: "wrong" })), /app mismatch/)
 })
 
 test("buildCsv emits header + one row per event with escapes", () => {

@@ -3,4 +3,4 @@
  * content-script/SW logs so "which build is live" is always answerable.
  * Kept in sync with package.json — enforced by version.test.ts.
  */
-export const APP_VERSION = "0.8.2"
+export const APP_VERSION = "0.8.3"
