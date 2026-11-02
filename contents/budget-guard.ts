@@ -246,31 +246,37 @@ function ensureStyle(): void {
   s.textContent = `
 .${ROOT_CLASS}-chip {
   position: absolute; z-index: 4; left: 6px; top: 6px;
-  background: #7f1d1d; color: #fecaca; font: 11px/1.2 Roboto, Arial, sans-serif;
-  padding: 3px 7px; border-radius: 999px; pointer-events: none;
-  box-shadow: 0 1px 4px rgba(0,0,0,.45);
+  background: #18323a; color: #fff; border: 1px solid #c58a3a;
+  font: 600 11px/1.25 "Avenir Next", Avenir, Arial, sans-serif;
+  padding: 4px 8px; border-radius: 3px; pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,.55);
 }
-.${ROOT_CLASS}-gentle { outline: 2px solid #e11d48; outline-offset: -2px; border-radius: 8px; }
+.${ROOT_CLASS}-gentle { outline: 2px solid #c58a3a; outline-offset: -2px; border-radius: 4px; }
 .${ROOT_CLASS}-strict-blur { filter: blur(14px); user-select: none; }
 .${ROOT_CLASS}-veil {
   position: absolute; inset: 0; z-index: 3; display: flex; align-items: center;
   justify-content: center; text-align: center; padding: 10px;
-  background: rgba(15,15,15,.72); color: #f1f1f1; font: 12px/1.4 Roboto, Arial, sans-serif;
-  cursor: pointer; border-radius: 8px;
+  background: rgba(17,39,44,.94); color: #f5faf7; border: 1px solid #86aaa2;
+  font: 600 12px/1.5 "Avenir Next", Avenir, Arial, sans-serif;
+  cursor: pointer; border-radius: 4px; text-shadow: 0 1px 2px #000;
 }
 .${ROOT_CLASS}-banner, .${ROOT_CLASS}-interstitial {
   position: fixed; z-index: 2147483646; left: 50%; transform: translateX(-50%);
-  background: #1c1012; color: #f1f1f1; border: 1px solid #7f1d1d;
-  border-radius: 12px; padding: 12px 16px; font: 13px/1.5 Roboto, Arial, sans-serif;
-  box-shadow: 0 8px 24px rgba(0,0,0,.5); max-width: 480px;
+  background: #18323a; color: #f4f8f5; border: 1px solid #c58a3a;
+  border-radius: 5px; padding: 14px 17px; font: 13px/1.55 "Avenir Next", Avenir, Arial, sans-serif;
+  box-shadow: 0 8px 28px rgba(0,0,0,.58); max-width: 480px;
 }
 .${ROOT_CLASS}-banner { top: 64px; }
 .${ROOT_CLASS}-interstitial {
   top: 30%; width: min(440px, 90vw);
 }
 .${ROOT_CLASS}-interstitial button, .${ROOT_CLASS}-banner button {
-  margin-top: 8px; margin-right: 8px; background: #3d1418; color: #fecaca;
-  border: 1px solid #7f1d1d; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+  margin-top: 8px; margin-right: 8px; background: #284a52; color: #fff;
+  border: 1px solid #86aaa2; border-radius: 4px; padding: 7px 12px; cursor: pointer;
+}
+.${ROOT_CLASS}-interstitial button:hover, .${ROOT_CLASS}-banner button:hover { background: #37616a; }
+.${ROOT_CLASS}-interstitial button:focus-visible, .${ROOT_CLASS}-banner button:focus-visible {
+  outline: 3px solid #f0c979; outline-offset: 2px;
 }
 .${ROOT_CLASS}-thumbwrap { position: relative; }
 `

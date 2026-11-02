@@ -99,7 +99,8 @@ export default function Dashboard() {
       <div className="app">
         <div className="sidebar">
           <div className="brand">
-            📊 YT Ledger <span className="sub">v{APP_VERSION}</span>
+            <span className="brand-mark" aria-hidden="true">◷</span>
+            YT Ledger <span className="sub">v{APP_VERSION}</span>
           </div>
           <nav className="nav">
             {ROUTES.map((r) => (
@@ -107,6 +108,7 @@ export default function Dashboard() {
                 key={r.id}
                 href={"#/" + r.id}
                 className={r.id === active.id ? "active" : ""}
+                aria-current={r.id === active.id ? "page" : undefined}
                 onClick={() => navigate(r.id)}
               >
                 {r.label}

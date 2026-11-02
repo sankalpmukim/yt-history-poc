@@ -71,11 +71,11 @@ export function StackedDailyBars({
             </g>
           )
         })}
-        <line x1={0} y1={chartH + 0.5} x2={width} y2={chartH + 0.5} stroke="#303030" />
-        <text x={0} y={height - 6} fill="#9aa0a6" fontSize={10}>
+        <line x1={0} y1={chartH + 0.5} x2={width} y2={chartH + 0.5} stroke="var(--border)" />
+        <text x={0} y={height - 6} fill="var(--muted)" fontSize={10}>
           {fmtDate(shown[0].date)}
         </text>
-        <text x={width} y={height - 6} fill="#9aa0a6" fontSize={10} textAnchor="end">
+        <text x={width} y={height - 6} fill="var(--muted)" fontSize={10} textAnchor="end">
           {fmtDate(shown[shown.length - 1].date)}
         </text>
       </svg>
@@ -111,7 +111,7 @@ export function Donut({
   let cum = 0
   return (
     <svg width={size} height={size} role="img" style={{ flex: "0 0 " + size + "px" }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#262626" strokeWidth={thickness} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--panel2)" strokeWidth={thickness} />
       {slices.map((s, i) => {
         const frac = total > 0 ? s.seconds / total : 0
         const dash = frac * c
@@ -151,13 +151,13 @@ export function Donut({
         x={size / 2}
         y={size / 2 - 4}
         textAnchor="middle"
-        fill="#f1f1f1"
+        fill="var(--text)"
         fontSize={17}
         fontWeight={700}
       >
         {fmtDur(total)}
       </text>
-      <text x={size / 2} y={size / 2 + 14} textAnchor="middle" fill="#9aa0a6" fontSize={10}>
+      <text x={size / 2} y={size / 2 + 14} textAnchor="middle" fill="var(--muted)" fontSize={10}>
         estimated
       </text>
     </svg>
