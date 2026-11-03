@@ -23,6 +23,11 @@ export function OnboardingView({
   onFinish: () => void
 }) {
   const [step, setStep] = useState(0)
+  const finish = async () => {
+    await patchSettings({ onboardedAt: new Date().toISOString() })
+    await reload()
+    onFinish()
+  }
 
   return (
     <div style={{ maxWidth: 760, margin: "40px auto", padding: "0 20px" }}>
@@ -47,15 +52,10 @@ export function OnboardingView({
       ) : null}
       {step === 3 ? (
         <BudgetModeStep
-          onNext={async () => {
-            await patchSettings({ onboardedAt: new Date().toISOString() })
-            await reload()
-            setStep(4)
-          }}
+          onNext={() => setStep(4)}
           onSkip={async () => {
-            await patchSettings({ onboardedAt: new Date().toISOString() })
-            await reload()
-            onFinish()
+            await patchSettings({ budgetMode: "off" })
+            setStep(4)
           }}
         />
       ) : null}
@@ -67,7 +67,7 @@ export function OnboardingView({
             review queue; rules do the rest automatically.
           </p>
           <div className="row" style={{ justifyContent: "flex-end" }}>
-            <button className="btn btn-primary" onClick={onFinish}>
+            <button className="btn btn-primary" onClick={() => void finish()}>
               Open dashboard
             </button>
           </div>

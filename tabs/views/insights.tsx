@@ -16,6 +16,7 @@ import { CategoryModal, RangeBar, fmtDur, RANGE_OPTIONS, rangeFromDate } from ".
 export function InsightsView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const [range, setRange] = useState<string>("90d")
   const [pickerChannel, setPickerChannel] = useState<string | null>(null)
+  const [drill, setDrill] = useState<{ channel: string; label: string; minScore: number; maxScore: number } | null>(null)
   const from = rangeFromDate(range)
 
   const catById = useMemo(
@@ -72,6 +73,13 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
     [data, from]
   )
   const maxWeekday = Math.max(...weekdays.map((w) => w.secondsPerOccurrence), 1)
+  const drillRows = drill
+    ? agg.rows.filter((row) => {
+        if (row.video.channel !== drill.channel || row.categoryId == null) return false
+        const score = catById.get(row.categoryId)?.valueScore
+        return score != null && score >= drill.minScore && score <= drill.maxScore
+      })
+    : []
 
   const applySuggestion = async (s: RuleSuggestion, categoryId: string) => {
     await ensureChannelRule(new ChromeKV(), s.channel, categoryId, new Date())
@@ -85,17 +93,48 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
         <RangeBar value={range} onChange={setRange} options={RANGE_OPTIONS.filter((o) => o.id !== "today") as unknown as Array<{ id: string; label: string }>} />
       </div>
 
+      {drill ? (
+        <div className="card">
+          <div className="spread">
+            <div>
+              <h2>Breakdown · {drill.channel}</h2>
+              <div className="muted small">{drill.label} · {drillRows.length} watch event(s)</div>
+            </div>
+            <button className="btn btn-sm" onClick={() => setDrill(null)}>← All insights</button>
+          </div>
+          {drillRows.length ? (
+            <div className="tablewrap">
+              <table className="ledger">
+                <thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Est. watched</th></tr></thead>
+                <tbody>
+                  {drillRows.map((row) => (
+                    <tr key={row.event.key}>
+                      <td>{row.event.watchedOn}</td>
+                      <td>{row.video.title}</td>
+                      <td>{catById.get(row.categoryId!)?.name ?? "—"}</td>
+                      <td>{fmtDur(row.estimatedSeconds)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <div className="empty">No matching watch events in this range.</div>}
+          <div className="small" style={{ marginTop: 10 }}>
+            Total · <b>{fmtDur(drillRows.reduce((sum, row) => sum + (row.estimatedSeconds ?? 0), 0))}</b>
+          </div>
+        </div>
+      ) : <>
       <div className="card">
         <h2>Worst offenders — most time in low-value categories (score ≤ 1)</h2>
         {worst.length === 0 ? (
           <div className="empty">No low-value time recorded. Either you're very wise, or rules need tuning 🙂</div>
         ) : (
           worst.map((c) => (
-            <div key={c.channel} className="queueitem">
+            <button key={c.channel} className="queueitem insight-channel" aria-label={`Drill into ${c.channel} low-value watch time`} onClick={() => setDrill({ channel: c.channel, label: "Worst offenders · score 0–1", minScore: 0, maxScore: 1 })}>
               <span style={{ flex: 1 }}>{c.channel}</span>
               <span className="muted small">{c.watchCount} watch(es)</span>
               <b style={{ width: 80, textAlign: "right" }}>{fmtDur(c.seconds)}</b>
-            </div>
+            </button>
           ))
         )}
       </div>
@@ -106,11 +145,11 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
           <div className="empty">Nothing in the high-value band yet this range.</div>
         ) : (
           best.map((c) => (
-            <div key={c.channel} className="queueitem">
+            <button key={c.channel} className="queueitem insight-channel" aria-label={`Drill into ${c.channel} high-value watch time`} onClick={() => setDrill({ channel: c.channel, label: "Best value · score 4–5", minScore: 4, maxScore: 5 })}>
               <span style={{ flex: 1 }}>{c.channel}</span>
               <span className="muted small">{c.watchCount} watch(es)</span>
               <b style={{ width: 80, textAlign: "right" }}>{fmtDur(c.seconds)}</b>
-            </div>
+            </button>
           ))
         )}
       </div>
@@ -183,6 +222,7 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
           onClose={() => setPickerChannel(null)}
         />
       ) : null}
+      </>}
     </div>
   )
 }

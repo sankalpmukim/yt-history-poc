@@ -15,7 +15,7 @@ import { mergeFetchResult } from "./merge"
 import { migrateV1Store } from "./migrate"
 import { DEFAULT_CATEGORIES, DEFAULT_SUBCATEGORIES, fallbackStarterRules, defaultMeta } from "./defaults"
 import { compileRules, matchFirstRule, targetOfVideo } from "./rules"
-import { validTargetIds } from "./taxonomy"
+import { resolveTarget, validTargetIds } from "./taxonomy"
 import { dayLabelToDate } from "../utils/day"
 
 const LEGACY_V1_KEY = "ytHistoryPoc.v1"
@@ -184,7 +184,8 @@ export async function runRulesPass(kv: KV, now: Date): Promise<RulesPassResult> 
   const subcategories = await readSubcategories(kv)
   const storedVideos = await readVideos(kv)
 
-  const compiled = compileRules(rules, validTargetIds(categories, subcategories))
+  const validTargets = validTargetIds(categories, subcategories)
+  const compiled = compileRules(rules, validTargets)
 
   const nowIso = now.toISOString()
   const videos: Record<string, typeof storedVideos[string]> = { ...storedVideos }
@@ -198,8 +199,19 @@ export async function runRulesPass(kv: KV, now: Date): Promise<RulesPassResult> 
       video.categoryOverride != null || compiled.length === 0
         ? null
         : matchFirstRule(compiled, targetOfVideo(video))
-    const nextAuto = match != null ? match.rule.categoryId : null
-    const nextRuleId = match != null ? match.rule.id : null
+    const previousRule = rules.find((rule) => rule.id === video.appliedRuleId)
+    const previousTarget = previousRule?.enabled
+      ? resolveTarget(previousRule.categoryId, categories, subcategories)
+      : null
+    // Archiving a category removes its rule targets from future assignment,
+    // but don't erase assignments already made by that still-enabled rule.
+    // This keeps historical value labels intact while blocking new matches.
+    const keepArchivedAssignment =
+      video.categoryOverride == null &&
+      previousTarget != null &&
+      !validTargets.has(previousTarget.targetId)
+    const nextAuto = match?.rule.categoryId ?? (keepArchivedAssignment ? video.autoCategoryId : null)
+    const nextRuleId = match?.rule.id ?? (keepArchivedAssignment ? video.appliedRuleId : null)
 
     if (video.autoCategoryId !== nextAuto || video.appliedRuleId !== nextRuleId) {
       videos[id] = { ...video, autoCategoryId: nextAuto, appliedRuleId: nextRuleId }

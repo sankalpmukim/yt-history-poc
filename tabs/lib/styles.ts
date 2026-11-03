@@ -145,6 +145,8 @@ table.ledger tr:hover td { background: color-mix(in srgb, var(--accent) 6%, var(
 .swatch { width: 10px; height: 10px; border-radius: 2px; flex: 0 0 10px; }
 .empty { color: var(--muted); padding: 22px 0; text-align: center; }
 .queueitem { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+.insight-channel { width: 100%; color: var(--text); text-align: left; background: transparent; border-inline: 0; border-top: 0; cursor: pointer; }
+.insight-channel:hover { color: var(--accent); background: var(--rule); }
 .queueitem:last-child { border-bottom: 0; }
 .qlink { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .steps { display: flex; gap: 0; margin: 14px 0 24px; border-bottom: 1px solid var(--border); }

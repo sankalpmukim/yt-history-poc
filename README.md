@@ -44,6 +44,16 @@ dismissible banner. The original fixture still lets you search for **Simple
 Flying** and test its channel-rule match. Import your exported backup afterward
 to restore your data.
 
+## Automated end-to-end QA
+
+Run `pnpm e2e` to install Playwright Chromium if needed, build the extension, and
+run the dashboard and live YouTube overlay specs. Each test launches an isolated
+persistent Chromium context with a newly created temporary profile; it does not
+read or modify your Brave or Chrome profile. Fixtures are written directly to
+`chrome.storage.local` from the extension dashboard page. Overlay specs visit
+real, logged-out YouTube pages and run in both light and dark color schemes.
+Screenshots are saved under `qa/e2e/<spec>/`.
+
 **Status: M8 complete** — everything in M7 plus **on-YouTube budget
 enforcement** (`contents/budget-guard.ts`): Off (default, zero DOM changes),
 Gentle (red outline + "over budget · category" chip on feed items; dismissible

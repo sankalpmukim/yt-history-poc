@@ -344,3 +344,33 @@ test("rules targeting archived/deleted categories are skipped", async () => {
   const videos = (await kv.get(KEYS.videos)) as any
   assert.equal(videos.tut.autoCategoryId, null, "archived target ⇒ rule unusable")
 })
+
+test("archiving a category preserves existing rule assignments but skips new ones", async () => {
+  const kv = new MemoryKV()
+  await ensureInitialized(kv, NOW)
+  await applySyncResult(kv, {
+    sections: [titledSection("Today", [{ videoId: "tut", title: "Docker tutorial for absolute beginners" }])],
+    now: NOW
+  })
+  let videos = (await kv.get(KEYS.videos)) as any
+  videos.tut = { ...videos.tut, autoCategoryId: "practical-coding", appliedRuleId: "starter-tutorial" }
+  await kv.set({ [KEYS.videos]: videos })
+  await runRulesPass(kv, NOW)
+  videos = (await kv.get(KEYS.videos)) as any
+  assert.equal(videos.tut.autoCategoryId, "practical-coding")
+
+  const cats = (await kv.get(KEYS.categories)) as any[]
+  cats.find((category) => category.id === "practical").archivedAt = NOW.toISOString()
+  await kv.set({ [KEYS.categories]: cats })
+  await runRulesPass(kv, NOW)
+  videos = (await kv.get(KEYS.videos)) as any
+  assert.equal(videos.tut.autoCategoryId, "practical-coding")
+  assert.equal(videos.tut.appliedRuleId, "starter-tutorial")
+
+  await applySyncResult(kv, {
+    sections: [titledSection("Today", [{ videoId: "new-tut", title: "Docker tutorial for absolute beginners" }])],
+    now: NOW
+  })
+  videos = (await kv.get(KEYS.videos)) as any
+  assert.equal(videos["new-tut"].autoCategoryId, null, "archived targets don't receive new assignments")
+})
