@@ -23,12 +23,18 @@ Owner decisions (2026-11-02, override docs/PLAN.md where different):
    category. Videos and rules may target them; charts default to parent-level
    rollups with click-to-drill-down. Pickers, the rule editor, and Ledger label
    them as **Parent › Sub** (e.g. `Practical how-tos › Coding`).
+9. **In-place taxonomy editing**: from any category/subcategory picker, users can
+   create categories and subs or rename/edit existing items without leaving the
+   picker. Categories/subcategories are reordered by drag-and-drop. Numeric value
+   scores and order/rank numbers are never shown or editable in the UI; internal
+   value and ordering follow ladder position.
 
 Milestone mapping: docs/PLAN.md defines milestones **M1–M8** (M7 = budgets, M8 = budget
 enforcement on YouTube). This checklist is organised M1–M8 plus cross-cutting
 sections that span phases (install/upgrade/migration, permissions & reinstall,
 privacy, performance, error states, empty states, accessibility, regressions,
-subcategories), and ends with a **smoke subset** to run between phases.
+subcategories, in-place taxonomy editing and number-free ordering), and ends with
+a **smoke subset** to run between phases.
 
 ---
 
@@ -213,11 +219,11 @@ categorization. Exit: all P0 pass against real history.
 | M4-001 | Toolbar → dashboard | Extension loaded | Click toolbar icon | Dashboard tab opens (no popup in v1) | P0 | Auto |
 | M4-002 | Focus existing | Dashboard already open | Click toolbar icon again | Existing tab focused; no duplicate tabs | P0 | Auto |
 | M4-003 | Hash routes | Dashboard open | Switch tabs; use back/forward; deep-link a hash | Views switch correctly; browser history works | P1 | Auto |
-| M4-004 | Stat cards present | Data synced | Open Overview | Cards: total est. watch time, avg/day, # videos, time value index (0–5), brain-rot share %, uncategorized count | P0 | Auto |
+| M4-004 | Stat cards present | Data synced | Open Overview | Cards: total est. watch time, avg/day, # videos, time value index, brain-rot share %, uncategorized count; do not expose category score numbers (numeric index range is superseded by TAX-027..035) | P0 | Auto |
 | M4-005 | Range switcher | Data across ranges | Toggle Today/7d/30d/90d/All | Cards + charts update per range | P0 | Auto |
 | M4-006 | Range math | Seeded events at day boundaries | Compare computed vs hand-calculated | Today = local midnight boundary; 7d rolling includes today; correct slicing | P1 | Auto |
-| M4-007 | Time value index | Seeded known dataset | Compare vs hand-calc | Weighted by watched time × score over total watched time; 0–5 scale; formula documented | P0 | Auto |
-| M4-008 | Brain-rot share | Seeded dataset | Compare | % of time in score ≤1 categories; matches hand-calc | P0 | Auto |
+| M4-007 | Time value index | Seeded known dataset | Compare vs hand-calc | Computed from internally derived category values and watched time; no per-category numeric scores exposed (numeric 0–5 display assumption superseded by TAX-032/034) | P0 | Auto |
+| M4-008 | Brain-rot share | Seeded dataset | Compare | % time in the lowest-value categories, derived from ladder position; no numeric score threshold shown in UI (numeric ≤1 display assumption superseded by TAX-032/034) | P0 | Auto |
 | M4-009 | Trend chart | Multi-day data | Inspect stacked daily bars | Daily bars stacked by category; buckets match watchedOn; hover shows values | P1 | Semi |
 | M4-010 | Breakdown | Data present | Inspect donut + ranked list | Per-category hours, % share, top channels listed | P0 | Auto |
 | M4-011 | Share math | Seeded dataset | Sum category shares | Shares ≈100% of *estimated* time; low-confidence policy applied consistently | P1 | Auto |
@@ -266,13 +272,13 @@ management UX judged good.
 | M5-011 | Starter rules editable | Fallback set present | Edit/disable starter rules | Fully editable like user rules; visibly labeled | P1 | Auto |
 | M5-012 | Rule stats shown | Rules with hits | View list | hitCount / lastHitAt visible | P2 | Auto |
 | M5-013 | Rule UX judgment | Real history | Create a channel rule in ≤30s from Ledger context | Fast, obvious, no dead-ends (owner: rules UX is the priority) | P1 | Manual |
-| M5-014 | Order obviousness | Several rules | View list | Priority order visually obvious (numbers or clear ordering) | P1 | Manual |
-| M5-015 | Category create | Manager open | Create category mid-ladder with emoji/color/score | Created at chosen position; appears in all pickers | P0 | Auto |
-| M5-016 | Category edits propagate | Category in use | Rename/re-score/re-color | Reflected across Overview, Ledger, chips, Insights immediately | P0 | Auto |
+| M5-014 | Order obviousness | Several rules | View list | Rule priority order visually obvious (rule-order numbers are unrelated to taxonomy rank and may remain) | P1 | Manual |
+| M5-015 | Category create | Manager open | Create category with name/emoji/color | Created at chosen ladder position; appears in all pickers; numeric score editing is superseded by TAX-023/032 | P0 | Auto |
+| M5-016 | Category edits propagate | Category in use | Rename/re-color | Reflected across Overview, Ledger, chips, Insights immediately; re-scoring is superseded by TAX-032/034 | P0 | Auto |
 | M5-017 | Category archive | Category in use | Archive it | Removed from pickers; existing videos handled sensibly (verify + document) | P1 | Semi |
-| M5-018 | Category reorder | Several categories | Reorder | New order reflected in ladder, breakdown lists, pickers | P1 | Auto |
+| M5-018 | Category reorder | Several categories | Drag and drop categories within the ladder | New order reflected everywhere; no numeric order labels/editors (see TAX-023/027/035) | P1 | Auto |
 | M5-019 | Archive vs delete | Manager open | Attempt delete | Only archive offered (per plan) or delete guarded; document | P2 | Semi |
-| M5-020 | Score change effects | Scored data present | Change a category's score | Time value index + brain-rot share recompute correctly | P0 | Auto |
+| M5-020 | Score change effects | Scored data present | Attempt to edit a category's numeric score | **Superseded by TAX-032/034**: score is not user-editable; value derives from ladder position and analytics update after reorder | P0 | Auto |
 | M5-021 | Archive-with-rules warning | Rule targets category | Archive it | Warning shown; rule handling defined (see M3-016) | P1 | Semi |
 | M5-022 | Sync status panel | ≥1 sync run | Open Settings | Last sync time, result, diagnostics shown; link to Sync now | P0 | Auto |
 | M5-023 | Sync now | Anytime (even just synced) | Click Refresh/Sync now | Manual sync runs immediately regardless of throttle | P0 | Auto |
@@ -304,7 +310,7 @@ averages, rule suggestions). Exit: all P0 pass on a fresh profile.
 |---|---|---|---|---|---|---|
 | M6-001 | Wizard auto-runs | Fresh install; first dashboard open | Open dashboard | Wizard starts automatically on first open | P0 | Auto |
 | M6-002 | Welcome + privacy note | Wizard step 1 | Read | Local-only privacy note clearly stated | P1 | Semi |
-| M6-003 | Ladder walkthrough | Wizard step 2 | Rename, reorder, remove a category | Edits apply; 0–5 spectrum visible | P0 | Auto |
+| M6-003 | Ladder walkthrough | Wizard step 2 | Rename, reorder, remove a category | Edits apply; ladder communicates relative value without numeric scores (0–5 spectrum display is superseded by TAX-030/035) | P0 | Auto |
 | M6-004 | Starter rules + live counts | History already synced | Open starter-rules step | Suggested keyword rules show live match counts vs existing history | P0 | Auto |
 | M6-005 | Start clean | Wizard step 3 | Choose "start clean" | No starter rules created | P1 | Auto |
 | M6-006 | Budget step skippable | Wizard step 4 | Skip | Completable without choosing; budgetMode stays 'off' | P1 | Auto |
@@ -317,15 +323,15 @@ averages, rule suggestions). Exit: all P0 pass on a fresh profile.
 | M6-013 | Upgraded POC user | v1 data migrated | First dashboard open | Wizard runs once; migrated data preserved | P1 | Semi |
 | M6-014 | Wizard failure | Simulate storage error mid-wizard | Complete/fail step | Falls back to defaults; no lockout or blank dashboard | P1 | Semi |
 | M6-015 | Wizard mid-state | Dismiss after partial edits | Reopen dashboard | Partial choices either kept or cleanly restarted — defined behavior | P2 | Semi |
-| M6-016 | Worst offenders | Scored history | Open Insights | Top channels ranked by low-value (score ≤1) watch time | P0 | Auto |
-| M6-017 | Best-value channels | Scored history | Open Insights | High-score channels ranked by time | P1 | Auto |
+| M6-016 | Worst offenders | Scored history | Open Insights | Top channels ranked by time in lowest-value categories; no category score numbers shown (numeric ≤1 threshold display superseded by TAX-029/034) | P0 | Auto |
+| M6-017 | Best-value channels | Scored history | Open Insights | Best-value channels ranked using internally derived ladder values; no category score numbers shown | P1 | Auto |
 | M6-018 | Weekday averages | Multi-week data | Open Insights | Weekday averages shown (no hour heatmap — day granularity only) | P1 | Auto |
 | M6-019 | Rule suggestions | Channel manually re-categorized repeatedly | Trigger Insights | "Always categorize X as…?" offered; accept creates rule; decline mutes | P0 | Auto |
 | M6-020 | Explicit learning only | Suggestions visible | Inspect | Nothing auto-created; learning only via explicit user action | P1 | Semi |
 | M6-021 | Insights empty state | <7 days data | Open Insights | Friendly insufficient-data state | P1 | Auto |
 | M6-022 | Insights ranges | Data present | Switch range | Insight figures respect selected range consistently | P2 | Auto |
 | M6-023 | Insights reconcile | Same dataset | Compare vs Overview | Totals agree with Overview for same range | P1 | Auto |
-| M6-024 | Value spectrum display | Categories scored | View Insights | 0–5 spectrum surfaced; low-value share consistent with Overview | P2 | Semi |
+| M6-024 | Value spectrum display | Categories have varied ladder positions | View Insights | **Superseded by TAX-029/034**: relative value may be communicated, but numeric category scores/spectrum are not displayed | P2 | Semi |
 
 ## M7 — Budgets core (UI, weekly logic, status snapshot)
 
@@ -566,6 +572,55 @@ explicit and never leaves dangling video or rule references.
 | SUB-017 | Export/import subcategory data | Subs, assignments, rules, and parent budgets exist | Export JSON/CSV; import JSON into a clean profile | JSON restores hierarchy, video/rule references, and budgets; CSV labels are auditable as `Parent › Sub` | P0 | Auto |
 | SUB-018 | Flat-data migration | Existing profile has flat categories, videos, and rules | Upgrade to subcategory-capable schema | Existing data remains attached to its original top-level categories; no forced subs or dangling references | P1 | Auto |
 
+## TAX — In-place taxonomy editing & drag-and-drop ordering
+
+Owner-approved UI behavior: category and subcategory pickers are editing
+surfaces, not dead ends. Users can create or edit taxonomy items in place, and
+new items are immediately selectable. Category and subcategory order is changed
+by drag-and-drop; the resulting position drives internal order and value. No
+numeric category value score or taxonomy-order/rank number is shown or editable
+anywhere in the UI. Category budgets remain attached to their top-level category
+and include subcategory spend (see docs/PLAN.md §3).
+
+| ID | Area | Preconditions | Steps | Expected | Pri | How |
+|---|---|---|---|---|---|---|
+| TAX-001 | Picker edit entry points | Categories/subcategories exist | Open Ledger row picker, bulk-categorize picker, review-queue picker, and rule-editor target picker | Each picker offers create and edit actions without navigating away from its owning flow | P0 | Auto |
+| TAX-002 | Create category in place | Any category picker open | Create a category with a name, emoji, and color | Item is created without closing/leaving the picker and appears in the taxonomy | P0 | Auto |
+| TAX-003 | Create subcategory in place | Picker open; at least one parent category exists | Create a subcategory and select its parent | New sub appears under the chosen parent, labeled Parent › Sub | P0 | Auto |
+| TAX-004 | Assign new category from Ledger | Ledger row picker open | Create a category; select it for the row | Newly created item is immediately selectable and the video is assigned to it | P0 | Auto |
+| TAX-005 | Assign new sub from bulk picker | Bulk selection active | Create a subcategory in the bulk picker; choose it | Selected videos are assigned to the new sub; counts and aggregates update once | P0 | Auto |
+| TAX-006 | Assign new item from review queue | Uncategorized review queue open | Create a category or sub and choose it | Video leaves the queue and the new assignment is visible immediately | P0 | Auto |
+| TAX-007 | Rule target created in place | Rule editor target picker open | Create a category or sub; select it as the target; save rule | Rule targets the new item; matching videos resolve to it | P0 | Auto |
+| TAX-008 | Rename category in place | Existing category picker open; category has assigned videos | Rename the category in the picker | Name updates without leaving the picker; assignments remain attached | P0 | Auto |
+| TAX-009 | Edit nonnumeric category attributes | Existing category | Edit supported name/emoji/color fields from picker | Edits save in place; numeric value score and order are not editable controls | P1 | Auto |
+| TAX-010 | Rename/edit subcategory in place | Existing subcategory picker open; sub has assignments | Rename/edit the sub | Parent › Sub label updates; assignments remain attached to the same sub | P0 | Auto |
+| TAX-011 | Changes propagate immediately | Dashboard views and pickers available | Rename a category/sub from one picker; inspect other pickers, Ledger, Overview, Categories, Rules, Insights | Updated label and taxonomy appear everywhere without a stale view or manual reload | P0 | Auto |
+| TAX-012 | Keyboard picker editing | Keyboard-only session; picker open | Navigate, invoke create/edit, fill fields, save, select item | Entire flow is operable by keyboard with visible focus and logical focus return | P0 | Semi |
+| TAX-013 | Screen-reader picker editing | VoiceOver enabled | Open picker, create/edit item, select it | Actions, parent-child relationship, validation, and selected value are announced clearly | P1 | Manual |
+| TAX-014 | Cancel and Escape | Create/edit form open with unsaved changes | Cancel via button; repeat using Escape | Form closes; no partial item or edit is saved; focus returns to picker trigger | P1 | Auto |
+| TAX-015 | Empty/whitespace name | Create/rename form open | Submit empty and whitespace-only names | Save is blocked with an associated, announced validation message; no blank label is created | P0 | Auto |
+| TAX-016 | Duplicate create name | Same-level category or same-parent sub already has that name | Try creating a duplicate (including case/whitespace variants) | Duplicate is prevented or disambiguated consistently; existing assignments are not confused | P1 | Auto |
+| TAX-017 | Rename to duplicate | Two same-level items exist | Rename one to the other's name | Collision is prevented with clear feedback; original name and assignments remain intact | P1 | Auto |
+| TAX-018 | Very long names | Create/edit form open | Enter a very long category and subcategory name; save and inspect picker, Ledger, charts | Name is saved or safely length-limited; layout remains usable and full name is accessible (tooltip/accessible name) | P1 | Semi |
+| TAX-019 | Archived items in picker | Archived category/sub exists | Open picker and inspect archived item; attempt assignment | Archived item is not offered as a new assignment target; existing references remain readable and manageable | P1 | Auto |
+| TAX-020 | Immediate selection in every flow | Picker opened from Ledger, bulk, queue, and rule editor | Create a new item, select it before leaving each flow | It becomes selectable immediately and selection applies to the video(s) or rule target | P0 | Auto |
+| TAX-021 | Reload persistence | Taxonomy edited/created and assigned | Reload dashboard/browser; reopen relevant pickers | Names, parent relationship, assignments, and order persist | P0 | Auto |
+| TAX-022 | Export/import persistence | New/edited categories and subs referenced by videos/rules | Export JSON, import into clean profile, inspect taxonomy and assignments | Names, hierarchy, order, and references round-trip; no missing or duplicate assignments | P0 | Auto |
+| TAX-023 | Drag top-level categories | At least three categories in the ladder | Drag one category to a different position | New position is saved and reflected in ladder and category ordering; no numeric rank label/input appears | P0 | Auto |
+| TAX-024 | Drag subcategories within parent | Parent has at least two subcategories | Drag a sub to a different sibling position | New sibling order persists; sub remains attached to the same parent | P0 | Auto |
+| TAX-025 | Keyboard reorder alternative | Categories/subcategories visible | Reorder using documented keyboard controls | Same final order as pointer drag; operation and resulting relative position are announced accessibly | P1 | Semi |
+| TAX-026 | Reorder persistence | Categories and subs reordered | Reload dashboard/browser; revisit ladder and picker | Dragged order remains consistent across reload and every taxonomy surface | P0 | Auto |
+| TAX-027 | No numeric score/order in Overview | Categories with varied positions; data present | Inspect Overview ladder, cards, trend, and breakdown | No numeric category score or category-order/rank number is shown; relative order/value can be conveyed without numerals | P0 | Semi |
+| TAX-028 | No numeric score/order in Categories | Categories manager open | Inspect ladder, create/edit forms, and reorder affordances | No score/order numbers or numeric score/order editors; reorder is drag-and-drop | P0 | Semi |
+| TAX-029 | No numeric score/order in Insights | Insights populated | Inspect worst/best-value and weekday views | No numeric category score or taxonomy-rank numbers appear; insights still communicate relative value | P0 | Semi |
+| TAX-030 | No numeric score/order in onboarding | Fresh profile; onboarding open | Inspect category ladder and all wizard steps | No numeric category scores or taxonomy-order numbers are visible or editable | P0 | Semi |
+| TAX-031 | No numeric score/order in Ledger | Ledger contains parent- and sub-assigned videos | Inspect rows, filters, chips, and pickers | Parent › Sub labels remain clear; no numeric category score/order is shown | P0 | Semi |
+| TAX-032 | Value follows ladder position | Dataset spans categories with different ladder positions | Reorder categories and compare derived value calculations before/after | Internal category value follows its new position; aggregate index/low-value share updates correctly without exposing category score numbers | P0 | Auto |
+| TAX-033 | Charts respond to reorder | Category chart/trend data present | Reorder categories; inspect Overview and drill-down charts | Display ordering follows ladder; totals and shares remain unchanged (no double count) | P1 | Auto |
+| TAX-034 | Insights respond to value/order | History spans categories and channels | Reorder categories; compare insights | Value-based channel rankings and value-index summaries reflect the new derived values; no numeric per-category scores shown | P0 | Auto |
+| TAX-035 | No stray taxonomy numerals | Overview, Categories, Insights, onboarding, Ledger, rule editor, all category pickers open | Search visually and with accessibility tree for numeric score/order labels or controls | No taxonomy value-score or order/rank numbers appear in visible UI or accessible names; unrelated counts, dates, durations, and rule priority remain intact | P0 | Semi |
+| TAX-036 | Budget unaffected by taxonomy reorder | Parent budget configured; parent and sub spend seeded | Reorder parent categories and subs; inspect Budgets and status | Budget remains attached to the same top-level category and includes subcategory time; reorder does not change spend totals | P1 | Auto |
+
 ## SMOKE — Between-phase subset (~15–20 min)
 
 Run after each phase completes (and before calling any phase done). All items
@@ -596,6 +651,10 @@ reference full cases above.
 | SMK-21 | Create sub, assign a video, verify Parent › Sub in Ledger and rule editor (SUB-001/005/010/011) | Assignment and labels persist |
 | SMK-22 | Check parent-level chart roll-up, then drill into subs (SUB-007/008) | Parent total reconciles; drill-down retains parent-only time |
 | SMK-23 | Parent budget includes sub spend; export/import preserves sub and rule references (SUB-012/017) | Budget and hierarchy survive round-trip |
+| SMK-24 | From Ledger picker, create a sub, select it, verify assignment and Parent › Sub label (TAX-001/003/004/011) | Created item applies immediately and updates other surfaces |
+| SMK-25 | Drag a category and sibling sub; reload (TAX-023/024/026) | New order persists with no numeric order labels |
+| SMK-26 | Inspect Overview, Categories, Insights, onboarding, and Ledger for numeric score/order labels (TAX-027..031/035) | None shown or editable |
+| SMK-27 | Reorder categories; verify value index/insights and parent budget roll-up (TAX-032/034/036) | Derived value updates; budget totals stay attached and correct |
 
 ---
 
@@ -620,8 +679,9 @@ reference full cases above.
 | A11Y Accessibility | 12 | 1 | 9 | 2 | 0 | 7 | 5 |
 | REG Regressions | 10 | 6 | 2 | 2 | 8 | 1 | 1 |
 | SUB Subcategories | 18 | 13 | 5 | 0 | 13 | 5 | 0 |
-| **Total** | **361** | **166** | **159** | **36** | **211** | **136** | **14** |
-| SMOKE (derived) | 23 | — | — | — | — | — | — |
+| TAX In-place taxonomy & ordering | 36 | 26 | 10 | 0 | 26 | 9 | 1 |
+| **Total** | **397** | **192** | **169** | **36** | **237** | **145** | **15** |
+| SMOKE (derived) | 27 | — | — | — | — | — | — |
 
 Maintenance: when a phase lands, mark each case pass/fail/blocked in a run log
 (separate file or column added here); any plan change that alters expected
