@@ -252,8 +252,8 @@ function ensureStyle(): void {
 .${ROOT_CLASS}-chip {
   position: absolute; z-index: 4; left: 6px; top: 6px;
   background: #18323a; color: #fff; border: 1px solid #c58a3a;
-  font: 600 11px/1.25 "YT Ledger Display", "Avenir Next", Avenir, Arial, sans-serif;
-  padding: 4px 8px; border-radius: 3px; pointer-events: none;
+  font: 600 clamp(12px, 1.3vw, 16px)/1.25 "YT Ledger Display", "Avenir Next", Avenir, Arial, sans-serif;
+  padding: 5px 9px; border-radius: 3px; pointer-events: none;
   box-shadow: 0 2px 8px rgba(0,0,0,.55);
 }
 .${ROOT_CLASS}-gentle { outline: 2px solid #c58a3a; outline-offset: -2px; border-radius: 4px; }
@@ -262,8 +262,14 @@ function ensureStyle(): void {
   position: absolute; inset: 0; z-index: 3; display: flex; align-items: center;
   justify-content: center; text-align: center; padding: 10px;
   background: rgba(17,39,44,.94); color: #f5faf7; border: 1px solid #86aaa2;
-  font: 600 12px/1.5 "YT Ledger Display", "Avenir Next", Avenir, Arial, sans-serif;
+  font: 600 clamp(13px, 1.6vw, 18px)/1.35 "YT Ledger Display", "Avenir Next", Avenir, Arial, sans-serif;
   cursor: pointer; border-radius: 4px; text-shadow: 0 1px 2px #000;
+}
+.${ROOT_CLASS}-veil-copy { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.${ROOT_CLASS}-veil-action { font-size: .78em; font-weight: 600; opacity: .9; }
+@media (prefers-color-scheme: light) {
+  .${ROOT_CLASS}-chip { background: #f5faf7; color: #10272c; border-color: #765017; text-shadow: none; }
+  .${ROOT_CLASS}-veil { background: rgba(245,250,247,.96); color: #10272c; border-color: #315c61; text-shadow: none; }
 }
 .${ROOT_CLASS}-banner, .${ROOT_CLASS}-interstitial {
   position: fixed; z-index: 2147483646; left: 50%; transform: translateX(-50%);
@@ -324,12 +330,13 @@ function unapplyCard(card: Element): void {
 function applyGentle(card: Element, categoryId: string): void {
   card.classList.add(ROOT_CLASS + "-gentle")
   const host = thumbnailHost(card)
+  const label = chip(`over budget · ${catName(categoryId)}`)
   if (host) {
     const wrap = host as HTMLElement
     if (getComputedStyle(wrap).position === "static") wrap.style.position = "relative"
-    wrap.appendChild(chip(`over budget · ${catName(categoryId)}`))
+    wrap.appendChild(label)
   } else {
-    card.appendChild(chip(`over budget · ${catName(categoryId)}`))
+    card.appendChild(label)
   }
 }
 
@@ -359,7 +366,15 @@ function applyStrict(card: Element, videoId: string, categoryId: string): void {
 
   const veil = document.createElement("div")
   veil.className = `${ROOT_CLASS} ${ROOT_CLASS}-veil`
-  veil.textContent = `hidden — ${catName(categoryId)} over budget (click to reveal)`
+  const copy = document.createElement("span")
+  copy.className = `${ROOT_CLASS}-veil-copy`
+  const categoryLine = document.createElement("span")
+  categoryLine.textContent = `Hidden · ${catName(categoryId)} over budget`
+  const actionLine = document.createElement("span")
+  actionLine.className = `${ROOT_CLASS}-veil-action`
+  actionLine.textContent = "Click to reveal"
+  copy.append(categoryLine, actionLine)
+  veil.appendChild(copy)
   veil.addEventListener("click", (e) => {
     e.preventDefault()
     e.stopPropagation()
