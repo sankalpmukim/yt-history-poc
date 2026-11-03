@@ -1,330 +1,125 @@
-# yt-history-poc → YT Ledger
+# YT Ledger
 
-**This repo is becoming "YT Ledger"** — an expense manager for your own
-YouTube watch history (watch events = transactions, categories = spending
-categories, value scores = the inverse of cost, budgets = time budgets).
-See [PLAN.md](./PLAN.md) for the approved product plan and milestones.
+**An expense manager for your YouTube watch time.** Categorize what you watch, see where the hours go, and set budgets YouTube itself will respect.
 
-**Status: subcategories + QA fixes (0.8.3)** — expense-manager-style children under each
-top-level category. Videos/rules assign to a sub or the parent; chips and
-pickers show `Parent › Sub`; Overview charts are top-level with click-to-drill
-into subs; budgets still roll up to the parent. Existing category-level
-assignments keep working; installs that predate this key get default subs
-seeded once. Ledger also shows the value tier; budget modes use an accessible,
-live-updating segmented control. Day-label parsing has explicit year-boundary
-coverage and correctly interprets labels such as `Oct 31`.
+![YT Ledger overview, dark theme](docs/screenshots/after/overview.png)
 
-## Budget-guard QA fixtures
+<p align="center">
+  <img src="docs/screenshots/after-light/overview-drilldown.png" alt="Category drill-down, light theme" width="49%">
+  <img src="docs/screenshots/after/ledger.png" alt="Ledger view" width="49%">
+</p>
 
-Run `pnpm qa:seed` to refresh both fixtures. `fixtures/qa-seed.json` contains sample events dated
-in the current local week, a 60-second News budget, 30 minutes of seeded
-News › World news watch time, subcategories, and channel/title rules. Use this
-fixture to exercise the regular seeded-data flow described below.
+## Why
 
-`fixtures/qa-seed-live.json` adds two live-test categories, each with a 60-second
-weekly budget and 30 minutes of seeded spend. Its enabled title rule matches
-nearly every non-empty live title (`.`); a higher-priority channel-substring rule
-routes NASA-channel items to the second category before the catch-all can match.
-Since both categories are already over budget, regular videos on any channel
-exercise the title rule, while NASA-channel videos exercise the channel rule.
+Expense trackers work because they make spending visible: every transaction lands in a category, and the totals tell you something you didn't want to hear. YT Ledger does the same for YouTube. Each video in your watch history becomes a ledger entry, and each category sits on a value ladder from *brain rot* (0) to *courses & lectures* (5). It's not about watching less. It's about knowing what the time actually went to.
 
-For either fixture, export your current JSON backup first. In YT Ledger, open
-**Settings → Data** and select the fixture with **Import JSON**, or paste its
-contents into **Import from pasted JSON**. Both routes validate the same
-backup format, ask for confirmation, and replace the current ledger. **Copy
-export JSON to clipboard** provides the matching no-file-dialog backup path.
-Both fixtures select Strict mode; switch to Gentle or Strict in **Settings →
-Budgets** to test each presentation. With the live fixture, test Home feed cards,
-Search results, the watch-page related-video sidebar, and a watch page itself:
-the guard reads the visible title/channel, so seeded synthetic video IDs do not
-need to appear on YouTube. A NASA-channel item tests the channel rule; any
-non-empty title from another channel tests the catch-all rule. Strict feed veils can be clicked to reveal a card;
-the watch-page interstitial has a **Watch anyway** action, while Gentle uses a
-dismissible banner. The original fixture still lets you search for **Simple
-Flying** and test its channel-rule match. Import your exported backup afterward
-to restore your data.
+YT Ledger is a Chromium browser extension (Manifest V3, built with [Plasmo](https://www.plasmo.com/)). Everything stays in your browser.
 
-## Automated end-to-end QA
+## Features
 
-Run `pnpm e2e` to install Playwright Chromium if needed, build the extension, and
-run the dashboard and live YouTube overlay specs. Each test launches an isolated
-persistent Chromium context with a newly created temporary profile; it does not
-read or modify your Brave or Chrome profile. Fixtures are written directly to
-`chrome.storage.local` from the extension dashboard page. Overlay specs visit
-real, logged-out YouTube pages and run in both light and dark color schemes.
-Screenshots are saved under `qa/e2e/<spec>/`.
+- **Value-scored categories.** Eight default categories scored 0–5, from *Brain rot* through *News & updates* and *Practical how-tos* to *Courses & lectures*. Rename, recolor, rescore, reorder or archive any of them.
+- **Subcategories.** Editable subcategories under every category (e.g. *Practical how-tos › Coding*), with sensible defaults. Charts show top-level categories and drill down in place.
+- **Auto-categorization rules.** Match by exact channel, channel substring, title keywords, title regex, Shorts and maximum duration. Rules run in priority order (first match wins) and can target a category or a subcategory. Test a rule against your history before saving. Manual categorization always wins over rules.
+- **Ledger.** Every watch event grouped by day, with search, category/subcategory filters, an "uncategorized only" review queue, inline categorization, and bulk edits.
+- **Overview and Insights.** Estimated watch time per range (today, 7, 30, 90 days, all), a daily time trace, a value index, low-value share, channel rankings, weekday patterns and rule suggestions.
+- **Weekly budgets.** Hours per week per category (subcategory time rolls up into its parent), with three enforcement modes on youtube.com:
+  - **Off:** track only, no changes to YouTube.
+  - **Gentle:** over-budget videos get an outline and an "over budget" chip, plus a dismissible banner on the watch page.
+  - **Strict:** over-budget thumbnails and titles are hidden behind a placeholder (click to reveal), and watch pages show an interstitial with a "Watch anyway" option.
+  Uncategorized videos are never blocked.
+- **Background sync.** Any YouTube visit triggers a sync (at most every couple of minutes) with a 14-day lookback. A manual **Sync now** lets you choose a shorter or longer lookback.
+- **Retention.** History is kept for one year by default; configurable.
+- **Export and import.** CSV export, JSON backup and restore (file or pasted JSON), and a full data wipe.
+- **Onboarding.** A first-run wizard for categories, starter rules and budgets. If you skip it, mild defaults apply.
+- **Light and dark themes** that follow your system setting.
 
-**Status: M8 complete** — everything in M7 plus **on-YouTube budget
-enforcement** (`contents/budget-guard.ts`): Off (default, zero DOM changes),
-Gentle (red outline + "over budget · category" chip on feed items; dismissible
-banner on watch/Shorts pages), Strict (blur thumbnail+title, click-to-reveal
-placeholder, dismissible "Watch anyway" interstitial). Classification uses
-stored overrides, then stored auto-category, then live rules on the visible
-title/channel; unknown videos fail open. One CSS class (`yl-budget-guard`)
-strips all injected UI. Debounced MutationObserver + per-videoId cache.
+## Privacy
 
-**Status: M7 complete** — everything in M6 plus **weekly budgets**: per-category
-hours/week in the Budgets tab, spent-vs-budget bars (over/under, week runs
-Monday 00:00 local), enforcement-mode picker (off/gentle/strict), and a
-`yl.v2.budgetStatus` snapshot the service worker refreshes on every relevant
-storage change so the on-YouTube guard never re-aggregates events.
+YT Ledger has no server, account, analytics or telemetry. Your data never leaves your browser.
 
-**Status: M6 complete** — everything in M5 plus the **onboarding wizard**
-(first dashboard open: privacy intro → category-ladder pass with live
-renames/re-scores → starter-rules selection with live match counts and a
-"start clean" option → budget-mode choice; skipping anywhere keeps the
-non-irritating fallback defaults; rerunnable from Settings) and
-**Insights**: worst offenders (channels by time in score ≤1), best-value
-channels (score ≥4), weekday-average watch pattern, and **rule
-suggestions** — channels you keep categorizing the same way manually
-("always categorize…?" one click) and channels with the most uncategorized
-time.
+- All data lives in `chrome.storage.local` on your machine.
+- The only network requests go to `youtube.com`, as your own signed-in session, to read your history page and to look up missing video durations from public watch pages.
 
-**Status: M5 complete** — everything in M4 plus the **Rules UI** (ordered
-list with enable/reorder/delete, hit counts, dead/archive warnings; full
-editor for channel equals/contains, title any-of, title regex + flags,
-Shorts-ness, duration bound, priority; **test-run** showing how many stored
-videos a rule would match before saving), the **Categories manager** (the
-0–5 value ladder: emoji/color/name/score editing, add, archive, reorder,
-per-category rule counts), and **Settings**: **Refresh / Sync now** anytime
-with a lookback picker (7–90 days, presets + custom), automatic fetch
-window, retention (90d / 1 year / forever), budget-mode selector (active
-from M8), debug toggles, **JSON backup export/import** and **CSV ledger
-export**, and a wipe zone.
+Permissions requested in the manifest:
 
-**Status: M4 complete** — the **dashboard** is live: click the YT Ledger
-toolbar icon to open it (a full tab; no popup — see the known Plasmo/Node-26
-popup bug). It ships **Overview** (range picker Today/7/30/90/All; stat
-cards for est. watch time, avg/day, time value index, low-value share,
-events, uncategorized time; daily stacked-bar trend by category; category
-donut + ranked list with share bars and top channels; review queue for
-uncategorized videos with inline categorize + one-click channel rules) and
-the **Ledger** (the transactions view: watch events grouped by day, search /
-category filters, per-row category chips with an "always for this channel"
-option, occurrence counts, estimate-confidence dots, multi-select bulk
-assign / clear overrides). Hand-rolled SVG charts — zero new runtime deps
-beyond react/react-dom.
+| Permission | Why |
+|---|---|
+| `storage` | Save your ledger, categories, rules, budgets and settings locally. |
+| `unlimitedStorage` | A year of watch history can exceed the default local storage quota. |
+| `scripting` | Register the page-context script that reads YouTube's own history data. |
+| Host access: `*://*.youtube.com/*` | Read your watch history, look up video durations, and show budget overlays. |
 
-**Status: M3 complete** — everything in M2 plus the **rules engine**: videos
-are auto-categorized on every sync (and re-tried whenever the duration
-resolver discovers new duration/isShort evidence) using priority-ordered,
-first-match-wins rules over channel (equals/contains), title (substrings or
-regex), Shorts-ness, and duration bounds. Matching is case-insensitive and
-fails closed — "unknown" data never matches, so categories are only assigned
-on real evidence. Manual overrides always win; disabled rules and rules
-targeting archived/deleted categories are skipped; invalid regexes disable a
-rule rather than break the pass. `hitCount` on each rule reflects how many
-videos it currently assigns. Ships with the two starter keyword rules
-enabled + a disabled Shorts rule (all editable).
+## Install
 
-**Status: M2 complete** — everything in M1 plus:
-- **Sync coordinator**: a visit to any YouTube page that can't read history
-  itself (Brave strips auth from extension-initiated innertube calls) asks
-  the service worker to sync elsewhere — it pokes an existing
-  `/feed/history` tab if one is announced, else opens one **hidden tab**
-  (`active:false`) that auto-scrolls to load the lookback window, syncs,
-  acks, and is closed (one at a time, throttled to one coordinator run per
-  2 minutes; manual `__YT_LEDGER_SYNC(n)` bypasses the throttle). Leftover
-  hidden tabs from dead service workers are cleaned up on startup.
-- **Duration resolver**: videos without a duration are queued and backfilled
-  from public watch pages (`lengthSeconds` + Shorts page-type detection),
-  ≤15 fetches per run, 600ms apart, ≤3 attempts per video, cached forever.
-  Auto-scroll only ever runs in hidden tabs — the user's own scrolling is
-  never fought.
+### From a release
 
-**Status: M1 complete** — v2 data layer (events with occurrences + monthly
-shards, videos, categories, rules, settings), single-writer merge in the
-service worker, v1→v2 migration, retention pruning (default 365d, was 48h),
-14-day automatic sync window (was 2), duration capture from history
-thumbnails, and a read-only fetch observer in the MAIN world so lookback can
-go deeper than the first page (as the user scrolls history). The original POC
-behavior (sync on every YouTube visit via `/feed/history`'s `ytInitialData`)
-is preserved.
+1. Download `yt-ledger-v<version>-chrome-mv3.zip` from the [latest release](https://github.com/sankalpmukim/yt-history-poc/releases/latest) and unzip it.
+2. Open `chrome://extensions` (or `brave://extensions`, `edge://extensions`) and enable **Developer mode**.
+3. Click **Load unpacked** and select the unzipped folder.
+4. Click the YT Ledger toolbar icon to open the dashboard, then visit YouTube once while signed in to run the first sync.
 
-## Legacy POC description
+YT Ledger isn't published to any extension store.
 
-Proof of concept: a Plasmo (MV3) browser extension that reads **your own**
-YouTube watch history for the **last two days**, caches it in
-`chrome.storage.local`, and keeps the cache in sync on every visit — never
-fetching or retaining anything older than the 2-day window (Today +
-Yesterday).
+### From source
 
-**Status: WORKING** — verified live in Brave against a real account:
-`sections: Today(11), Yesterday(14)` → `stored 25 entries (last 2 days)`.
+Requires Node.js and [pnpm](https://pnpm.io/).
 
-## How it works (final architecture)
-
-```
-┌────────────────────────── youtube.com tab ──────────────────────────┐
-│                                                                     │
-│ ISOLATED world (contents/history-sync.ts)  [static manifest CS]     │
-│  · injects the MAIN-world script via a <script src> tag             │
-│    (url: import → auto web_accessible_resource)                     │
-│  · asks MAIN for history, merges into chrome.storage.local          │
-│  · merge: upsert by videoId, keep firstSeenAt, refresh dayLabel     │
-│  · prune: drop entries not in latest fetch AND firstSeenAt > 48h    │
-│  · renders a bottom-right overlay + console logs                    │
-│                                                                     │
-│ MAIN world (contents/history-main.ts)      [injected script tag]    │
-│  · on /feed/history: reads window.ytInitialData — the page's own    │
-│    authenticated server-rendered history data (no API call needed)  │
-│  · parses day-grouped sections (Today/Yesterday/…) via a recursive  │
-│    walker; stops at the first section older than yesterday          │
-│  · 2026 shapes: lockupViewModel items (contentId,                    │
-│    metadata.lockupMetadataViewModel.title.content, progress via     │
-│    thumbnailOverlayProgressBarViewModel.startPercent) + legacy      │
-│    videoRenderer fallback                                           │
-│                                                                     │
-│ background (background.ts) — service worker                         │
-│  · storage.onChanged relay (debug channel to local capture server)  │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Key discoveries made during the POC (why it looks like this)
-
-1. **No public API exists** for watch history (removed from YouTube Data
-   API in 2016; Data Portability API is EU-only + app-verification-gated).
-2. **Direct innertube POSTs (`/youtubei/v1/browse`) from extension-injected
-   scripts come back `logged_in: 0` in Brave** — even with
-   `credentials: "include"` and a valid SAPISIDHASH Authorization header.
-   The page's own session cookies are stripped from extension-initiated
-   API requests. (May differ in Chrome proper.)
-3. **The reliable path: `youtube.com/feed/history` server-renders the
-   history into `window.ytInitialData`** — fully authenticated, same
-   day-grouped structure, ~50+ items per page load. The extension reads
-   what the page itself already fetched.
-4. **`chrome.scripting.registerContentScripts(world: "MAIN")` from the
-   service worker was unreliable**; the classic `<script src>` injection
-   from the isolated script works perfectly.
-5. **MV3 permission gotcha**: *updating* an unpacked extension after adding
-   `host_permissions` puts it in a permission limbo where content scripts
-   silently stop injecting. A fresh Remove + Load unpacked grants
-   everything. Lesson: change permissions → reinstall.
-
-### Data captured per entry
-
-```jsonc
-{
-  "videoId": "eMBI0isVJbo",
-  "title": "Drivers React After The Race | 2026 Mexico Grand Prix",
-  "channel": "FORMULA 1",
-  "url": "https://www.youtube.com/watch?v=eMBI0isVJbo",
-  "watchState": "Watched 16%",        // best effort (progress bar)
-  "dayLabel": "Today",                // YouTube's day-group header
-  "firstSeenAt": "…", "lastSeenAt": "…"  // our own sync timestamps
-}
-```
-
-> Note: innertube/ytInitialData group items by day ("Today", "Yesterday",
-> then weekdays/dates) — no exact watch timestamps. The 2-day window is
-> therefore day-granular. Exact times only exist in My Activity / Takeout.
-
-## Run it
-
-```bash
+```sh
+git clone https://github.com/sankalpmukim/yt-history-poc.git
+cd yt-history-poc
 pnpm install
-pnpm build          # → build/chrome-mv3-prod
+pnpm build          # → build/chrome-mv3-prod (load this folder unpacked)
 ```
 
-1. open `brave://extensions` → enable **Developer mode**
-2. **Load unpacked** → select `build/chrome-mv3-prod`
-3. open https://www.youtube.com/feed/history — the overlay appears
-   bottom-right; console shows `[yt-history-poc]` logs
+## Development
 
-## Debug tooling (this repo)
+```sh
+pnpm dev            # development build with live reload → build/chrome-mv3-dev
+pnpm build          # production build → build/chrome-mv3-prod
+pnpm package        # production zip → build/chrome-mv3-prod.zip
+pnpm test           # unit tests (node:test)
+pnpm e2e            # Playwright end-to-end tests in a throwaway Chromium profile
+pnpm qa:seed        # regenerate the test fixtures in fixtures/
+```
 
-- `scripts/adx.py` — robust agent-desktop wrappers for the flaky compound
-  UI loop (update-extension with SW-restart verification, switch-tab,
-  reload-active, console-grep).
-- `scripts/capture-server.py` — local sink the SW relays storage events to
-  (`python3 scripts/capture-server.py`, port 8742, writes to
-  `/private/tmp/opencode/yt-poc-dumps/`). Page-context fetches to it are
-  CSP-blocked; only the service worker can reach it.
-- `scripts/test-parse.mjs` — offline parser tests against captured real
-  response shapes.
+Project layout:
 
-## Verification shortcuts
+```
+background.ts        service worker: single writer for storage, sync coordinator, duration resolver
+contents/            content scripts on youtube.com
+  history-sync.ts      isolated-world script: talks to the page script, forwards results
+  history-main.ts      page-context script: reads your history page's own data
+  budget-guard.ts      Gentle / Strict budget overlays
+core/                pure, unit-tested logic: merge, rules, aggregation, budgets, insights, retention, import/export
+tabs/                the dashboard (React): Overview, Ledger, Rules, Categories, Insights, Budgets, Settings, onboarding
+e2e/                 Playwright specs        fixtures/  deterministic test data
+qa/                  QA checklist and docs   docs/      design plan and screenshots
+```
 
-- Unit tests for the core logic: `pnpm test` (87 tests, node + esbuild).
-- Budget enforcement: toolbar → dashboard → Budgets. Set hours/week on a
-  category you overspend, pick Gentle then Strict. On youtube.com home,
-  over-budget cards get a red outline (Gentle) or a blur + click-to-reveal
-  (Strict); a watch page shows a banner / "Watch anyway" interstitial.
-  Unknown videos are never touched. Off restores stock YouTube.
-- After any sync, inspect auto-categorization in the SW console:
-  `chrome.storage.local.get("yl.v2.videos", d => Object.values(d["yl.v2.videos"]).filter(v => v.appliedRuleId))`
-  — tutorial/lecture-ish titles should show `appliedRuleId:
-  "starter-tutorial"/"starter-lecture"`. Rule stats:
-  `chrome.storage.local.get("yl.v2.rules", console.dir)` (hitCount = videos
-  currently assigned by each rule).
-- Manual override check: set a video's `categoryOverride` in the console,
-  re-sync (`window.__YT_LEDGER_SYNC()`), and confirm rules leave it alone.
-- Console (page context): filter `yt-ledger` — shows sync flow, sections,
-  stored-event summary from the service worker.
-- Visit `youtube.com` (any page, NOT the history feed): within a few seconds
-  the console shows `coordinator: hidden tab N opened (14d lookback)` — a
-  background tab opens `/feed/history`, auto-scrolls, syncs, and closes.
-- `window.__YT_LEDGER_SYNC()` in the page console forces a re-sync;
-  `window.__YT_LEDGER_SYNC(30)` forces one with a 30-day lookback (works
-  from any YouTube page — it goes through the coordinator).
-- Service-worker console (`brave://extensions` → YT Ledger → service
-  worker): watch for `duration resolver: +N resolved…`; the v2 keys are
-  `yl.v2.*` (meta, videos, events.<YYYY-MM>, categories, rules,
-  durationQueue/durationAttempts, syncState).
-- A small on-page debug overlay can be enabled with
-  `settings.debugOverlay` in `yl.v2.meta` (off by default).
+See [`qa/README.md`](qa/README.md) for how testing works, and [`docs/PLAN.md`](docs/PLAN.md) for the original design.
 
-## Troubleshooting: "YT History POC" overlay / `chrome.storage` undefined
+## How it works
 
-Symptom: a bottom-right overlay with **old POC text** ("YT History POC — 0
-videos (last 2 days) … error: Cannot read properties of undefined (reading
-'local')") after updating the extension.
+YouTube has no public API for watch history, so YT Ledger reads it the same way your browser displays it:
 
-Cause: that overlay is rendered by the **old POC content script still alive
-in an already-open YouTube tab**. A plain extension *reload* does not
-re-inject content scripts into existing tabs — the previous script keeps
-running there, orphaned, and after a reload its `chrome.*` bindings are dead
-(hence `chrome.storage` being `undefined`). The same text can also linger as
-frozen DOM. Independently, reloading (instead of removing + re-adding) an
-unpacked extension whose manifest **gained permissions** (`unlimitedStorage`
-in M1) can leave it in a permission limbo where extension APIs vanish.
+1. When you visit any YouTube page, a content script asks the service worker for a sync. If no history tab is open, the worker opens `youtube.com/feed/history` in a background tab and closes it when the sync is done.
+2. A page-context script reads the history page's own server-rendered data (`ytInitialData`), plus its continuation pages, within your signed-in session. It collects day-grouped entries going back over the lookback window.
+3. The service worker merges the entries into the local ledger and counts rewatches as separate watch events. It then applies your rules and fills in missing durations from public watch pages.
+4. Watch time is *estimated*: video duration × watched progress (from YouTube's progress bar) × number of watch events. YouTube only exposes day-level history, so times within a day are approximate.
+5. The budget guard compares this week's time per category against your budgets and decorates matching YouTube items in Gentle or Strict mode.
 
-Fix (exact steps):
+## Limitations
 
-1. `brave://extensions` → Developer mode on.
-2. **Remove every entry** for this project (both "YT History POC" and any
-   earlier "YT Ledger" load) — a stale second entry keeps injecting its old
-   scripts. Do not keep two.
-3. **Load unpacked** → select exactly
-   `/Users/sankalpmukim/code/personal/yt-history-poc/build/chrome-mv3-prod`.
-   The entry must show **YT Ledger**, version **0.2.1** (see `core/version.ts`;
-   a version-sync unit test keeps it matched to package.json).
-4. **Hard-reload every open YouTube tab** (⌘⇧R) or close them and open a
-   fresh one — this kills orphaned old scripts and lets the new content
-   script inject.
-5. Verify in the YouTube tab's console (filter `yt-ledger`):
-   `content script v0.2.1 loaded on www.youtube.com/…` appears, and
-   `window.__YT_LEDGER_VERSION` returns `"0.2.1"`.
-6. The new build also **auto-removes any leftover POC overlay** and keeps
-   removing it if an orphaned script re-adds it (for 5 minutes after load),
-   so the old card disappears once the new script runs.
+- **Chromium only.** Tested in Brave; should work in Chrome, Edge and other Chromium browsers. Firefox and Safari aren't supported.
+- **Depends on YouTube's page structure.** The history data format is undocumented and changes over time. The parser is defensive, but a YouTube change can break syncing until the parser is updated.
+- **Estimates, not exact time.** Watch time comes from duration × progress, and history is only day-granular.
+- **Watch history must be on.** If YouTube watch history is paused for your account, there's nothing to read.
+- **No toolbar popup.** The toolbar icon opens the full dashboard in a tab.
 
-Quick identity check for "which build is live": the console line above, the
-version on `brave://extensions`, and `window.__YT_LEDGER_VERSION` in any
-YouTube tab must all agree.
+## Contributing
 
-## Known limitations
+Issues and pull requests are welcome. Before opening a PR, run `pnpm test` and `pnpm build`, and run `pnpm e2e` if you changed the dashboard or overlays. Keep logic in `core/` pure and covered by unit tests.
 
-- No toolbar popup page: Plasmo 0.90.5 pins parcel 2.9.3, whose resolver
-  fails on the generated `.plasmo/static/popup.tsx` shim under Node 26.
-  Content scripts + background are unaffected. (Build with Node ≤ 22 to
-  add one.)
-- Reading only happens on `/feed/history` pages. Next step for the POC:
-  have the background worker open a hidden tab to `/feed/history`, sync,
-  and close it — so any YouTube page open triggers a sync.
-- The innertube/ytInitialData shapes are undocumented and churn; the
-  parser walks defensively (recursive key search + multiple renderer
-  shapes) but will occasionally need updating.
-- Personal-use, own-data POC: it reads your history exactly as the
-  YouTube tab itself does. Distributing publicly has different policy
-  implications (YouTube ToS / store review).
+## License
+
+License: TBD. The bundled Barlow Condensed fonts are licensed under the [SIL Open Font License 1.1](assets/fonts/OFL-Barlow.txt).
