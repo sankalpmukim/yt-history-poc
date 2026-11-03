@@ -1,7 +1,7 @@
 /**
  * Single-writer merge of fetched history sections into the v2 store shape.
  *
- * Semantics (see PLAN.md §5/§7):
+ * Semantics (see docs/PLAN.md §5/§7):
  *  - day labels are resolved to local calendar days at merge time
  *  - events are keyed `${videoId}|${watchedOn}`; occurrences within a day are
  *    counted from the fetch (the feed is authoritative, so the latest fetched

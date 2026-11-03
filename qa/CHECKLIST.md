@@ -1,11 +1,11 @@
 # YT Ledger — QA Checklist & Test Plan
 
-Living QA document. Written against the **planned** feature set — PLAN.md plus the
+Living QA document. Written against the **planned** feature set — docs/PLAN.md plus the
 owner's product decisions below — **not** against the current implementation. Test
-names describe *intended* behavior; where PLAN.md is ambiguous the case says
+names describe *intended* behavior; where docs/PLAN.md is ambiguous the case says
 **"verify + document"** so the behavior gets pinned down during testing.
 
-Owner decisions (2026-11-02, override PLAN.md where different):
+Owner decisions (2026-11-02, override docs/PLAN.md where different):
 
 1. Name: **YT Ledger**.
 2. Retention user-configurable, **default 1 year (365d)**.
@@ -17,14 +17,14 @@ Owner decisions (2026-11-02, override PLAN.md where different):
    rules must have **great UX** (a QA focus, partly judgment-based).
 5. **Insights and budgets in scope** (later phases).
 6. **Budget enforcement on YouTube pages**, user-chosen mode: **off / gentle /
-   strict** (see §4.5 of PLAN.md).
+   strict** (see §4.5 of docs/PLAN.md).
 7. **Sync must be invisible** and never disrupt YouTube browsing.
 8. **Subcategories** can be created, renamed, archived, and reordered under a
    category. Videos and rules may target them; charts default to parent-level
    rollups with click-to-drill-down. Pickers, the rule editor, and Ledger label
    them as **Parent › Sub** (e.g. `Practical how-tos › Coding`).
 
-Milestone mapping: PLAN.md defines milestones **M1–M8** (M7 = budgets, M8 = budget
+Milestone mapping: docs/PLAN.md defines milestones **M1–M8** (M7 = budgets, M8 = budget
 enforcement on YouTube). This checklist is organised M1–M8 plus cross-cutting
 sections that span phases (install/upgrade/migration, permissions & reinstall,
 privacy, performance, error states, empty states, accessibility, regressions,

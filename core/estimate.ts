@@ -1,5 +1,5 @@
 /**
- * Watch-time estimation (PLAN.md §5).
+ * Watch-time estimation (docs/PLAN.md §5).
  *
  *   watchedSec = durationSec × progressFraction × occurrences
  *   progressFraction = progressAvgPct/100 when known, else 1.0

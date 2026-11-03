@@ -1,5 +1,5 @@
 /**
- * Retention pruning of stored watch events (PLAN.md §6).
+ * Retention pruning of stored watch events (docs/PLAN.md §6).
  * User-configurable; default 365 days; null = keep forever.
  */
 
