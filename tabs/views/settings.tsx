@@ -237,10 +237,12 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
           <input type="checkbox" checked={settings.debugOverlay} onChange={(e) => void patchSettings({ debugOverlay: e.target.checked })} />
           on-YouTube debug overlay
         </label>
-        <label className="small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="checkbox" checked={settings.devRelay} onChange={(e) => void patchSettings({ devRelay: e.target.checked })} />
-          dev relay to local capture server (127.0.0.1:8742)
-        </label>
+        {process.env.NODE_ENV !== "production" && (
+          <label className="small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="checkbox" checked={settings.devRelay} onChange={(e) => void patchSettings({ devRelay: e.target.checked })} />
+            dev relay to local capture server
+          </label>
+        )}
       </div>
 
       <div className="card">

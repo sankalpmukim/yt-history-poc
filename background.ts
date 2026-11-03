@@ -29,7 +29,9 @@ import type { MetaState } from "./core/types"
 
 const kv: KV = chromeKV()
 
-const RELAY = "http://127.0.0.1:8742"
+// Dev-only: compiled out of production builds (no localhost host permission ships).
+const DEV_BUILD = process.env.NODE_ENV !== "production"
+const RELAY = DEV_BUILD ? "http://127.0.0.1:8742" : ""
 const HISTORY_URL = "https://www.youtube.com/feed/history"
 const COORDINATOR_MIN_INTERVAL_MS = 120_000
 const HIDDEN_TAB_TIMEOUT_MS = 45_000
@@ -42,12 +44,12 @@ let devRelay = false
 async function refreshDevRelay(): Promise<void> {
   try {
     const bag = await chrome.storage.local.get(KEYS.meta)
-    devRelay = bag?.[KEYS.meta]?.settings?.devRelay === true
+    devRelay = DEV_BUILD && bag?.[KEYS.meta]?.settings?.devRelay === true
   } catch {}
 }
 
 function ping(path: string, body: string) {
-  if (!devRelay) return
+  if (!DEV_BUILD || !devRelay) return
   try {
     fetch(`${RELAY}/${path}`, {
       method: "POST",

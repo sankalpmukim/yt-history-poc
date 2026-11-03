@@ -1,7 +1,7 @@
 {
   "name": "yt-ledger",
   "displayName": "YT Ledger",
-  "version": "0.8.3",
+  "version": "0.9.0",
   "description": "An expense manager for your YouTube watch history — categorize what you watch, see where the time goes, budget it. Local-only.",
   "private": true,
   "scripts": {
@@ -33,8 +33,7 @@
       "unlimitedStorage"
     ],
     "host_permissions": [
-      "*://*.youtube.com/*",
-      "http://127.0.0.1:8742/*"
+      "*://*.youtube.com/*"
     ],
     "web_accessible_resources": [
       {
