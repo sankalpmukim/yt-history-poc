@@ -24,7 +24,8 @@ export const test = base.extend<{ ledger: LedgerSession }>({
     }
     const profileDir = await mkdtemp(join(tmpdir(), "yt-ledger-playwright-profile-"))
     const context = await chromium.launchPersistentContext(profileDir, {
-      headless: process.env.PW_HEADLESS === "1",
+      channel: "chromium",
+      headless: process.env.HEADED !== "1",
       viewport: { width: 1440, height: 1050 },
       colorScheme: testInfo.project.use.colorScheme ?? "light",
       acceptDownloads: true,

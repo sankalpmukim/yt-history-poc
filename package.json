@@ -10,6 +10,7 @@
     "package": "plasmo package",
     "qa:seed": "node scripts/create-qa-seed.mjs",
     "e2e": "pnpm exec playwright install chromium && pnpm build && playwright test",
+    "e2e:headed": "pnpm exec playwright install chromium && pnpm build && HEADED=1 playwright test",
     "test": "rm -rf .test && esbuild core/*.test.ts utils/*.test.ts --bundle --platform=node --format=esm --outdir=.test && node --test .test/"
   },
   "dependencies": {
