@@ -7,7 +7,7 @@ import { setVideoCategory, ensureChannelRule } from "../../core/assign"
 import { ChromeKV } from "../../core/storage"
 import {
   CategoryChip,
-  CategoryModal,
+  TaxonomyPicker,
   RangeBar,
   RANGE_OPTIONS,
   fmtDur,
@@ -57,7 +57,7 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
     const cat = catById.get(id)
     if (cat) return cat.color
     const sub = subById.get(id)
-    return (sub && catById.get(sub.parentId)?.color) || "#6b7280"
+    return (sub?.color ?? (sub && catById.get(sub.parentId)?.color)) || "#6b7280"
   }
   const labelOf = (id: string | null) => {
     if (id == null) return "Uncategorized"
@@ -94,11 +94,11 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
           </div>
           <div className="reading-note">
             <strong>{agg.valueIndex == null ? "—" : agg.valueIndex.toFixed(1)}</strong>
-            <span>time value index · 0–5</span>
+            <span>time value index</span>
           </div>
           <div className="reading-note">
             <strong>{fmtPct(agg.lowValueShare)}</strong>
-            <span>low-value share · score ≤ 1</span>
+            <span>time in lower-value categories</span>
           </div>
           <div className="reading-note">
             <strong>{agg.totalEvents}</strong>
@@ -125,7 +125,7 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
         <div className="spread">
           <div>
             <h2>Where the time went</h2>
-            <div className="muted small">Each mark sits on your 0–5 value ladder. Select a category to open its subcategories.</div>
+            <div className="muted small">Position on the ladder reflects value. Select a category to open its subcategories.</div>
           </div>
           {drill ? (
             <button className="btn btn-sm" onClick={() => setDrill(null)}>← All categories</button>
@@ -133,8 +133,7 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
         </div>
         <div className="ladder-head" aria-hidden="true">
           <span>Category</span>
-          <div className="ladder-scale">{[0, 1, 2, 3, 4, 5].map((v) => <span key={v}>{v}</span>)}</div>
-          <span style={{ textAlign: "right" }}>Value</span>
+          <div className="ladder-direction"><span>Lower value</span><span>Higher value</span></div>
           <span style={{ textAlign: "right" }}>Time</span>
         </div>
         {agg.byCategory.map((c) => {
@@ -159,7 +158,6 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
                   {score != null ? <span className="ladder-progress" style={{ width: `${score * 20}%`, background: colorOf(c.categoryId) }} /> : null}
                   {score != null ? <span className="ladder-marker" style={{ left: `${score * 20}%`, color: colorOf(c.categoryId), background: colorOf(c.categoryId) }} /> : null}
                 </span>
-                <span className="value-score">{score == null ? "—" : `${score}/5`}</span>
                 <span className="value-time">{fmtDur(c.seconds)} <span className="muted">{fmtPct(c.share)}</span></span>
               </button>
               {expanded ? (
@@ -208,7 +206,7 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
       </div>
 
       {pickerVideo ? (
-        <CategoryModal
+        <TaxonomyPicker
           title="Categorize video"
           contextLine={
             <span>
@@ -219,6 +217,7 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
           subcategories={data.subcategories}
           current={pickerVideo.categoryOverride}
           channel={pickerVideo.channel || undefined}
+          reload={reload}
           onChoose={async (choice) => {
             const kv = new ChromeKV()
             await setVideoCategory(kv, pickerVideo.videoId, choice.categoryId, new Date())

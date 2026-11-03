@@ -11,7 +11,8 @@ test("Onboarding can be rerun and completed through every step", async ({ ledger
   await page.screenshot({ path: "qa/e2e/onboarding/01-welcome.png", fullPage: true })
 
   await page.getByRole("button", { name: "Start setup" }).click()
-  await expect(page.getByRole("heading", { name: /Your value ladder/ })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Set up your category ladder" })).toBeVisible()
+  await expect(page.locator("body")).not.toContainText(/0–5|0-5|\b[0-5]\s*\/\s*5\b/)
   await page.screenshot({ path: "qa/e2e/onboarding/02-categories.png", fullPage: true })
   await page.getByRole("button", { name: "Skip (keep defaults)" }).click()
 

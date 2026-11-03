@@ -7,7 +7,10 @@ test("Rules CRUD covers every condition, preview, invalid regex, and subcategory
   await page.getByRole("button", { name: "+ New rule" }).click()
 
   await page.getByLabel("Name").fill("QA all-conditions rule")
-  await page.getByLabel("Category").selectOption("practical-coding")
+  await page.getByRole("button", { name: "Choose rule category" }).click()
+  await page.getByRole("combobox", { name: "Search categories and subcategories" }).fill("Coding")
+  await page.getByRole("option", { name: "⌨️ Practical how-tos › Coding" }).click()
+  await page.getByRole("button", { name: "Apply", exact: true }).click()
   await page.getByLabel("Channel is exactly").fill("Simple Flying")
   await page.getByLabel("Channel contains").fill("Flying")
   await page.getByLabel("Title contains (comma-separated, any-of)").fill("fleet, tutorial")

@@ -11,7 +11,7 @@ import {
 } from "../../core/insights"
 import { ensureChannelRule } from "../../core/assign"
 import { ChromeKV } from "../../core/storage"
-import { CategoryModal, RangeBar, fmtDur, RANGE_OPTIONS, rangeFromDate } from "../lib/ui"
+import { TaxonomyPicker, RangeBar, fmtDur, RANGE_OPTIONS, rangeFromDate } from "../lib/ui"
 
 export function InsightsView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const [range, setRange] = useState<string>("90d")
@@ -125,12 +125,12 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
         </div>
       ) : <>
       <div className="card">
-        <h2>Worst offenders — most time in low-value categories (score ≤ 1)</h2>
+        <h2>Worst offenders — most time in lower-value categories</h2>
         {worst.length === 0 ? (
           <div className="empty">No low-value time recorded. Either you're very wise, or rules need tuning 🙂</div>
         ) : (
           worst.map((c) => (
-            <button key={c.channel} className="queueitem insight-channel" aria-label={`Drill into ${c.channel} low-value watch time`} onClick={() => setDrill({ channel: c.channel, label: "Worst offenders · score 0–1", minScore: 0, maxScore: 1 })}>
+            <button key={c.channel} className="queueitem insight-channel" aria-label={`Drill into ${c.channel} low-value watch time`} onClick={() => setDrill({ channel: c.channel, label: "Worst offenders", minScore: 0, maxScore: 1 })}>
               <span style={{ flex: 1 }}>{c.channel}</span>
               <span className="muted small">{c.watchCount} watch(es)</span>
               <b style={{ width: 80, textAlign: "right" }}>{fmtDur(c.seconds)}</b>
@@ -140,12 +140,12 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
       </div>
 
       <div className="card">
-        <h2>Best value — most time learning (score ≥ 4)</h2>
+        <h2>Best value — most time in higher-value categories</h2>
         {best.length === 0 ? (
           <div className="empty">Nothing in the high-value band yet this range.</div>
         ) : (
           best.map((c) => (
-            <button key={c.channel} className="queueitem insight-channel" aria-label={`Drill into ${c.channel} high-value watch time`} onClick={() => setDrill({ channel: c.channel, label: "Best value · score 4–5", minScore: 4, maxScore: 5 })}>
+            <button key={c.channel} className="queueitem insight-channel" aria-label={`Drill into ${c.channel} high-value watch time`} onClick={() => setDrill({ channel: c.channel, label: "Best value", minScore: 4, maxScore: 5 })}>
               <span style={{ flex: 1 }}>{c.channel}</span>
               <span className="muted small">{c.watchCount} watch(es)</span>
               <b style={{ width: 80, textAlign: "right" }}>{fmtDur(c.seconds)}</b>
@@ -207,11 +207,12 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
       </div>
 
       {pickerChannel ? (
-        <CategoryModal
+        <TaxonomyPicker
           title={`Always categorize “${pickerChannel}” as…`}
           categories={data.categories}
           subcategories={data.subcategories}
           current={null}
+          reload={reload}
           onChoose={async (choice) => {
             if (choice.categoryId) {
               await ensureChannelRule(new ChromeKV(), pickerChannel, choice.categoryId, new Date())

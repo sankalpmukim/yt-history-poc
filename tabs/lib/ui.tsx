@@ -1,8 +1,11 @@
 /** Shared UI atoms for the dashboard. */
 
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { BudgetMode, Category, Subcategory } from "../../core/types"
 import { chipLabelForTarget } from "../../core/taxonomy"
+import { runRulesPass } from "../../core/ledger"
+import { ChromeKV } from "../../core/storage"
+import { writeCategories, writeSubcategories } from "./data"
 
 export function fmtDur(seconds: number | null | undefined): string {
   if (seconds == null) return "—"
@@ -90,40 +93,145 @@ export interface CategoryChoice {
 }
 
 /**
- * Modal category picker: choose a category (or clear the override), with an
- * optional "always categorize this channel" action.
+ * Shared, searchable taxonomy picker. Creation and inline edits are persisted
+ * immediately; assignment remains an explicit final action.
  */
-export function CategoryModal({
+export function TaxonomyPicker({
   title,
   contextLine,
   categories,
   subcategories = [],
   current,
+  canClear = current != null,
   channel,
   onChoose,
-  onClose
+  onClose,
+  reload
 }: {
   title: string
   contextLine?: ReactNode
   categories: Category[]
   subcategories?: Subcategory[]
   current: string | null
+  canClear?: boolean
   channel?: string
   onChoose: (choice: CategoryChoice) => void
   onClose: () => void
+  reload: () => Promise<void>
 }) {
-  const [selected, setSelected] = useState<string | null>(current)
+  const [selected, setSelected] = useState<string | null>(
+    categories.some((category) => category.id === current && !category.archivedAt) ||
+    subcategories.some((sub) => sub.id === current && !sub.archivedAt)
+      ? current
+      : null
+  )
   const [alsoRule, setAlsoRule] = useState(false)
+  const [query, setQuery] = useState("")
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState({ name: "", emoji: "", color: "#3b82f6" })
+  const [error, setError] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const live = useMemo(() => categories.filter((category) => !category.archivedAt), [categories])
+  const liveSubs = useMemo(() => subcategories.filter((sub) => !sub.archivedAt), [subcategories])
+  const trimmedQuery = query.trim()
+  const lowerQuery = trimmedQuery.toLocaleLowerCase()
+  const matchesCategory = (category: Category) => !lowerQuery || `${category.emoji} ${category.name}`.toLocaleLowerCase().includes(lowerQuery)
+  const matchesSub = (sub: Subcategory, parent: Category) => !lowerQuery || `${sub.emoji} ${parent.name} ${sub.name}`.toLocaleLowerCase().includes(lowerQuery)
+  const visibleTargets = live.flatMap((category) => [
+    ...(matchesCategory(category) ? [category.id] : []),
+    ...liveSubs.filter((sub) => sub.parentId === category.id && matchesSub(sub, category)).map((sub) => sub.id)
+  ])
+  const duplicateCategory = trimmedQuery.length > 0 && categories.some((category) => category.name.trim().toLocaleLowerCase() === lowerQuery)
+  const duplicateSubParents = new Set(subcategories.filter((sub) => sub.name.trim().toLocaleLowerCase() === lowerQuery).map((sub) => sub.parentId))
+
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null
+    inputRef.current?.focus()
+    return () => previousFocus?.focus()
+  }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
+      if (e.key === "Escape") { e.preventDefault(); onClose() }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [onClose])
-  const live = categories.filter((c) => !c.archivedAt)
-  const liveSubs = (parentId: string) =>
-    subcategories.filter((s) => s.parentId === parentId && !s.archivedAt).sort((a, b) => a.order - b.order)
+
+  const uniqueId = (name: string) => {
+    const base = name.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 32) || "category"
+    const used = new Set([...categories.map((item) => item.id), ...subcategories.map((item) => item.id)])
+    let id = base
+    for (let suffix = 2; used.has(id); suffix++) id = `${base.slice(0, 27)}-${suffix}`
+    return id
+  }
+  const refreshTaxonomy = async () => {
+    await runRulesPass(new ChromeKV(), new Date())
+    await reload()
+  }
+  const createCategory = async () => {
+    const name = trimmedQuery
+    if (!name || duplicateCategory) return
+    const id = uniqueId(name)
+    await writeCategories([...categories, { id, name, emoji: "🏷️", color: "#3b82f6", valueScore: 0, order: categories.length }])
+    await refreshTaxonomy()
+    setSelected(id)
+    setQuery("")
+    setError("")
+  }
+  const createSubcategory = async (parent: Category) => {
+    const name = trimmedQuery
+    if (!name || duplicateSubParents.has(parent.id)) return
+    const id = uniqueId(`${parent.id}-${name}`)
+    const siblings = liveSubs.filter((sub) => sub.parentId === parent.id)
+    await writeSubcategories([...subcategories, { id, parentId: parent.id, name, emoji: "•", color: parent.color, order: siblings.length }])
+    await refreshTaxonomy()
+    setSelected(id)
+    setQuery("")
+    setError("")
+  }
+  const beginEdit = (item: Category | Subcategory) => {
+    const isCategory = "valueScore" in item
+    const parent = isCategory ? undefined : categories.find((category) => category.id === item.parentId)
+    setEditingId(item.id)
+    setDraft({ name: item.name, emoji: item.emoji, color: isCategory ? item.color : item.color ?? parent?.color ?? "#3b82f6" })
+    setError("")
+  }
+  const saveEdit = async (id: string) => {
+    const name = draft.name.trim()
+    if (!name) {
+      setError("Name cannot be empty.")
+      return
+    }
+    const category = categories.find((item) => item.id === id)
+    const subcategory = subcategories.find((item) => item.id === id)
+    const isDuplicate = category
+      ? categories.some((item) => item.id !== id && item.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())
+      : subcategories.some((item) => item.id !== id && item.parentId === subcategory?.parentId && item.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())
+    if (isDuplicate) {
+      setError("That name is already used in this list.")
+      return
+    }
+    if (category) {
+      await writeCategories(categories.map((item) => item.id === id ? { ...item, name, emoji: draft.emoji.trim() || "🏷️", color: draft.color } : item))
+    } else {
+      await writeSubcategories(subcategories.map((item) => item.id === id ? { ...item, name, emoji: draft.emoji.trim() || "•", color: draft.color } : item))
+    }
+    await refreshTaxonomy()
+    setEditingId(null)
+    setError("")
+  }
+
+  const chooseWithKeyboard = (key: "ArrowDown" | "ArrowUp" | "Enter") => {
+    if (key === "Enter") {
+      const id = visibleTargets[activeIndex]
+      if (id) setSelected(id)
+      return
+    }
+    if (visibleTargets.length) setActiveIndex((index) => (index + (key === "ArrowDown" ? 1 : -1) + visibleTargets.length) % visibleTargets.length)
+  }
+
   return (
     <div
       className="overlay"
@@ -131,40 +239,97 @@ export function CategoryModal({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="menu" style={{ width: 420 }}>
-        <h3>{title}</h3>
+      <div
+        ref={dialogRef}
+        className="menu taxonomy-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="taxonomy-picker-title"
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return
+          const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])'
+          ) ?? []).filter((element) => element.offsetParent !== null)
+          if (!controls.length) { event.preventDefault(); inputRef.current?.focus(); return }
+          const first = controls[0]
+          const last = controls[controls.length - 1]
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+        }}
+      >
+        <h3 id="taxonomy-picker-title">{title}</h3>
         {contextLine ? <div className="muted small" style={{ marginBottom: 10 }}>{contextLine}</div> : null}
-        <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 360, overflowY: "auto" }}>
-          {live.map((c) => (
-            <div key={c.id}>
-              <button
-                className="opt"
-                onClick={() => setSelected(c.id)}
-                aria-pressed={selected === c.id}
-              >
-                <span>
-                  {c.emoji} {c.name}
-                </span>
-                <span className="muted small" style={{ marginLeft: "auto" }}>
-                  value {c.valueScore}/5
-                </span>
-              </button>
-              {liveSubs(c.id).map((s) => (
-                <button
-                  key={s.id}
-                  className="opt"
-                  onClick={() => setSelected(s.id)}
-                  aria-pressed={selected === s.id}
-                  style={{ paddingLeft: 28 }}
-                >
-                  <span>
-                    {s.emoji} {c.name} › {s.name}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ))}
+        <label className="small taxonomy-search-label" htmlFor="taxonomy-search">Search or create</label>
+        <input
+          ref={inputRef}
+          id="taxonomy-search"
+          role="combobox"
+          aria-label="Search categories and subcategories"
+          aria-autocomplete="list"
+          aria-expanded="true"
+          aria-controls="taxonomy-options"
+          aria-activedescendant={visibleTargets[activeIndex] ? `taxonomy-option-${visibleTargets[activeIndex]}` : undefined}
+          autoComplete="off"
+          type="text"
+          value={query}
+          placeholder="Type a category or subcategory…"
+          onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); setError("") }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); chooseWithKeyboard(event.key) }
+            if (event.key === "Enter") { event.preventDefault(); chooseWithKeyboard("Enter") }
+          }}
+        />
+        {trimmedQuery ? (
+          <div className="taxonomy-create-row">
+            <button type="button" className="btn btn-sm" disabled={duplicateCategory} onClick={() => void createCategory()}>
+              Create category “{trimmedQuery}”
+            </button>
+            {duplicateCategory ? <span className="muted small">That category already exists.</span> : null}
+          </div>
+        ) : null}
+        {current && !selected ? <div className="taxonomy-notice">The current assignment is archived. It remains on existing history but cannot be selected for new assignments.</div> : null}
+        {categories.some((category) => category.archivedAt) || subcategories.some((sub) => sub.archivedAt)
+          ? <div className="muted small">Archived items stay on existing history and are hidden from new picks.</div>
+          : null}
+        <div id="taxonomy-options" role="listbox" aria-label="Available categories and subcategories" className="taxonomy-options">
+          {live.map((category) => {
+            const subs = liveSubs.filter((sub) => sub.parentId === category.id && matchesSub(sub, category)).sort((a, b) => a.order - b.order)
+            return (
+              <div key={category.id} className="taxonomy-group">
+                {matchesCategory(category) ? (
+                  <div className="taxonomy-option-row">
+                    <button id={`taxonomy-option-${category.id}`} type="button" role="option" aria-selected={selected === category.id} className={`opt${visibleTargets[activeIndex] === category.id ? " keyboard-active" : ""}`} onClick={() => setSelected(category.id)}>
+                      <span className="swatch" style={{ background: category.color }} />{category.emoji} {category.name}
+                    </button>
+                    <button type="button" className="btn btn-sm" aria-label={`Edit ${category.name}`} onClick={() => beginEdit(category)}>Edit</button>
+                  </div>
+                ) : <div className="taxonomy-parent-label">{category.emoji} {category.name}</div>}
+                {editingId === category.id ? <TaxonomyEditForm draft={draft} setDraft={setDraft} error={error} onSave={() => void saveEdit(category.id)} onCancel={() => { setEditingId(null); setError("") }} /> : null}
+                {subs.map((sub) => (
+                  <div key={sub.id}>
+                    <div className="taxonomy-option-row taxonomy-subrow">
+                      <button id={`taxonomy-option-${sub.id}`} type="button" role="option" aria-selected={selected === sub.id} className={`opt${visibleTargets[activeIndex] === sub.id ? " keyboard-active" : ""}`} onClick={() => setSelected(sub.id)}>
+                        <span className="swatch" style={{ background: sub.color ?? category.color }} />{sub.emoji} {category.name} › {sub.name}
+                      </button>
+                      <button type="button" className="btn btn-sm" aria-label={`Edit ${sub.name}`} onClick={() => beginEdit(sub)}>Edit</button>
+                    </div>
+                    {editingId === sub.id ? <TaxonomyEditForm draft={draft} setDraft={setDraft} error={error} onSave={() => void saveEdit(sub.id)} onCancel={() => { setEditingId(null); setError("") }} includeColor /> : null}
+                  </div>
+                ))}
+                {trimmedQuery ? (
+                  <div className="taxonomy-create-row taxonomy-subcreate">
+                    <button type="button" className="btn btn-sm" disabled={duplicateSubParents.has(category.id)} onClick={() => void createSubcategory(category)}>
+                      Create “{trimmedQuery}” under {category.name}
+                    </button>
+                    {duplicateSubParents.has(category.id) ? <span className="muted small">That subcategory already exists.</span> : null}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+          {live.length === 0 ? <div className="empty">No active categories. Create one above.</div> : null}
         </div>
+        {error && !editingId ? <div role="alert" className="taxonomy-error">{error}</div> : null}
         {channel ? (
           <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "12px 0 0" }}>
             <input
@@ -178,7 +343,7 @@ export function CategoryModal({
           </label>
         ) : null}
         <div className="row" style={{ marginTop: 14, justifyContent: "flex-end" }}>
-          {current ? (
+          {canClear ? (
             <button
               className="btn"
               onClick={() => onChoose({ categoryId: null, alsoChannelRule: false })}
@@ -198,6 +363,32 @@ export function CategoryModal({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function TaxonomyEditForm({
+  draft,
+  setDraft,
+  error,
+  onSave,
+  onCancel,
+  includeColor = true
+}: {
+  draft: { name: string; emoji: string; color: string }
+  setDraft: (draft: { name: string; emoji: string; color: string }) => void
+  error: string
+  onSave: () => void
+  onCancel: () => void
+  includeColor?: boolean
+}) {
+  return (
+    <div className="taxonomy-edit" aria-label="Edit taxonomy item">
+      <label className="small">Name<input aria-label="Name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+      <label className="small">Emoji<input aria-label="Emoji" maxLength={4} value={draft.emoji} onChange={(event) => setDraft({ ...draft, emoji: event.target.value })} /></label>
+      {includeColor ? <label className="small">Color<input aria-label="Color" type="color" value={draft.color} onChange={(event) => setDraft({ ...draft, color: event.target.value })} /></label> : null}
+      {error ? <span role="alert" className="taxonomy-error">{error}</span> : null}
+      <div className="row"><button type="button" className="btn btn-sm btn-primary" onClick={onSave}>Save</button><button type="button" className="btn btn-sm" onClick={onCancel}>Cancel edit</button></div>
     </div>
   )
 }

@@ -9,6 +9,7 @@ import { KEYS, isEventsKey } from "../../core/types"
 import type { Settings } from "../../core/types"
 import { defaultSettings } from "../../core/defaults"
 import type { BudgetStatus } from "../../core/budget"
+import { deriveCategoryScores, normalizeCategoryLadder } from "../../core/taxonomy"
 
 export interface LedgerData {
   meta: MetaState | null
@@ -23,9 +24,13 @@ export interface LedgerData {
 export async function loadLedgerData(): Promise<LedgerData> {
   const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
   const meta = (all[KEYS.meta] as MetaState) ?? null
-  const categories = Array.isArray(all[KEYS.categories])
+  const storedCategories = Array.isArray(all[KEYS.categories])
     ? (all[KEYS.categories] as Category[])
     : []
+  const categories = normalizeCategoryLadder(storedCategories)
+  if (JSON.stringify(categories) !== JSON.stringify(storedCategories)) {
+    await chrome.storage.local.set({ [KEYS.categories]: categories })
+  }
   const subcategories = Array.isArray(all[KEYS.subcategories])
     ? (all[KEYS.subcategories] as Subcategory[])
     : []
@@ -73,7 +78,7 @@ export async function patchSettings(patch: Partial<Settings>): Promise<void> {
 }
 
 export async function writeCategories(categories: Category[]): Promise<void> {
-  await chrome.storage.local.set({ [KEYS.categories]: categories })
+  await chrome.storage.local.set({ [KEYS.categories]: deriveCategoryScores(categories) })
 }
 
 export async function writeRules(rules: Rule[]): Promise<void> {

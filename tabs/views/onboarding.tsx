@@ -133,24 +133,15 @@ function CategoriesStep({
 
   return (
     <div className="card">
-      <h2>Your value ladder (0 = brain rot → 5 = deep learning)</h2>
+      <h2>Set up your category ladder</h2>
       <p className="muted small">
-        Rename or re-score anything — the ladder drives the "time value index". Colors, emoji,
-        ordering, subcategories, and new categories can be managed later in the Categories tab.
+        Categories are valued by their position, from higher-value at the top to lower-value at the bottom. You can rename them here; colors, emoji, ordering, subcategories, and new categories can be managed later in Categories.
       </p>
       {cats.map((c) => (
         <div key={c.id}>
           <div className="queueitem">
             <span style={{ width: 30 }}>{c.emoji}</span>
             <input type="text" value={c.name} style={{ flex: 1 }} onChange={(e) => update(c.id, { name: e.target.value })} />
-            <label className="small">
-              value
-              <select value={c.valueScore} onChange={(e) => update(c.id, { valueScore: Number(e.target.value) as Category["valueScore"] })}>
-                {[0, 1, 2, 3, 4, 5].map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </label>
           </div>
           <div className="muted small" style={{ paddingLeft: 42, marginBottom: 6 }}>
             {data.subcategories

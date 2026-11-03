@@ -5,7 +5,11 @@ import {
   validTargetIds,
   resolveTarget,
   topLevelCategoryId,
-  labelForTarget
+  labelForTarget,
+  scoreAtPosition,
+  deriveCategoryScores,
+  normalizeCategoryLadder,
+  reorderById
 } from "./taxonomy"
 
 test("default subs: unique ids, every parent exists, no collisions with categories", () => {
@@ -56,4 +60,26 @@ test("validTargetIds drops archived parents and their children", () => {
   assert.ok(!ids.has("practical-coding"))
   assert.ok(ids.has("deep"))
   assert.ok(ids.has("deep-lectures"))
+})
+
+test("category position derives the legacy value scale from highest at top to lowest at bottom", () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7].map((i) => scoreAtPosition(i, 8)), [5, 4, 4, 3, 2, 1, 1, 0])
+  assert.equal(scoreAtPosition(0, 1), 5)
+  assert.deepEqual(deriveCategoryScores([{ ...DEFAULT_CATEGORIES[0], order: 99 }]).map((c) => [c.order, c.valueScore]), [[0, 5]])
+})
+
+test("legacy score ordering upgrades to high-first and keeps backup categories intact", () => {
+  const legacy = [...DEFAULT_CATEGORIES].reverse().map((category, index) => ({ ...category, order: index }))
+  const normalized = normalizeCategoryLadder(legacy)
+  assert.equal(normalized[0].id, "deep")
+  assert.equal(normalized.at(-1)?.id, "brain-rot")
+  assert.deepEqual(normalized.map((c) => c.valueScore), [5, 4, 4, 3, 2, 1, 1, 0])
+  assert.equal(normalized.length, DEFAULT_CATEGORIES.length)
+})
+
+test("reorderById supports pointer and keyboard reorder targets without mutating input", () => {
+  const items = [{ id: "a" }, { id: "b" }, { id: "c" }]
+  assert.deepEqual(reorderById(items, "c", 0).map((x) => x.id), ["c", "a", "b"])
+  assert.deepEqual(reorderById(items, "missing", 0), items)
+  assert.deepEqual(items.map((x) => x.id), ["a", "b", "c"])
 })

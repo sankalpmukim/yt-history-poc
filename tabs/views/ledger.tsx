@@ -7,7 +7,7 @@ import { setVideoCategory, bulkAssign, ensureChannelRule } from "../../core/assi
 import { ChromeKV } from "../../core/storage"
 import {
   CategoryChip,
-  CategoryModal,
+  TaxonomyPicker,
   RangeBar,
   RANGE_OPTIONS,
   fmtDur,
@@ -22,6 +22,8 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
   const [onlyUncategorized, setOnlyUncategorized] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pickerFor, setPickerFor] = useState<string | null>(null)
+  const [bulkPicker, setBulkPicker] = useState(false)
+  const [bulkTarget, setBulkTarget] = useState<string | null>(null)
   const catById = useMemo(
     () => new Map(data.categories.map((c) => [c.id, c] as const)),
     [data.categories]
@@ -121,34 +123,19 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
       {selected.size > 0 ? (
         <div className="bulkbar">
           <b>{selected.size}</b> selected
-          <select id="bulkcat" defaultValue="">
-            <option value="" disabled>
-              choose category…
-            </option>
-            {data.categories.filter((c) => !c.archivedAt).map((c) => (
-              <optgroup key={c.id} label={`${c.emoji} ${c.name}`}>
-                <option value={c.id}>{c.name} (parent)</option>
-                {data.subcategories
-                  .filter((s) => s.parentId === c.id && !s.archivedAt)
-                  .sort((a, b) => a.order - b.order)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {c.name} › {s.name}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </select>
+          <button className="btn btn-sm" onClick={() => setBulkPicker(true)}>
+            {bulkTarget ? `Chosen: ${data.categories.find((c) => c.id === bulkTarget)?.name ?? data.subcategories.find((s) => s.id === bulkTarget)?.name}` : "Choose category…"}
+          </button>
           <button
             className="btn btn-primary btn-sm"
             onClick={async () => {
-              const el = document.getElementById("bulkcat") as HTMLSelectElement | null
-              const catId = el?.value
-              if (!catId) return
-              await bulkAssign(new ChromeKV(), [...selected], catId, new Date())
+              if (!bulkTarget) return
+              await bulkAssign(new ChromeKV(), [...selected], bulkTarget, new Date())
               setSelected(new Set())
+              setBulkTarget(null)
               await reload()
             }}
+            disabled={!bulkTarget}
           >
             Assign
           </button>
@@ -190,7 +177,6 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
                     <th>Channel</th>
                     <th style={{ width: 70 }}>Duration</th>
                     <th style={{ width: 70 }}>Est. watched</th>
-                    <th style={{ width: 150 }}>Value tier</th>
                     <th style={{ width: 34 }}></th>
                     <th style={{ width: 20 }}></th>
                   </tr>
@@ -202,7 +188,6 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
                       row={r}
                       categories={data.categories}
                       subcategories={data.subcategories}
-                      tier={r.categoryId ? catById.get(r.categoryId) : undefined}
                       checked={selected.has(r.video.videoId)}
                       onToggle={() => toggle(r.video.videoId)}
                       onPickCategory={() => setPickerFor(r.video.videoId)}
@@ -216,7 +201,7 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
       )}
 
       {pickerVideo ? (
-        <CategoryModal
+        <TaxonomyPicker
           title="Categorize video"
           contextLine={
             <span>
@@ -225,8 +210,10 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
           }
           categories={data.categories}
           subcategories={data.subcategories}
-          current={pickerVideo.categoryOverride}
+          current={pickerVideo.categoryOverride ?? pickerVideo.autoCategoryId}
+          canClear={pickerVideo.categoryOverride != null}
           channel={pickerVideo.channel || undefined}
+          reload={reload}
           onChoose={async (choice) => {
             const kv = new ChromeKV()
             await setVideoCategory(kv, pickerVideo.videoId, choice.categoryId, new Date())
@@ -239,6 +226,23 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
           onClose={() => setPickerFor(null)}
         />
       ) : null}
+      {bulkPicker ? (
+        <TaxonomyPicker
+          title={`Categorize ${selected.size} selected videos`}
+          categories={data.categories}
+          subcategories={data.subcategories}
+          current={bulkTarget}
+          onChoose={async ({ categoryId }) => {
+            if (categoryId) await bulkAssign(new ChromeKV(), [...selected], categoryId, new Date())
+            setBulkTarget(null)
+            setBulkPicker(false)
+            setSelected(new Set())
+            await reload()
+          }}
+          onClose={() => setBulkPicker(false)}
+          reload={reload}
+        />
+      ) : null}
     </div>
   )
 }
@@ -247,7 +251,6 @@ function LedgerRowView({
   row,
   categories,
   subcategories,
-  tier,
   checked,
   onToggle,
   onPickCategory
@@ -255,8 +258,6 @@ function LedgerRowView({
   row: LedgerRow
   categories: import("../../core/types").Category[]
   subcategories: import("../../core/types").Subcategory[]
-  /** top-level category supplying the 0–5 value score */
-  tier: import("../../core/types").Category | undefined
   checked: boolean
   onToggle: () => void
   onPickCategory: () => void
@@ -285,22 +286,6 @@ function LedgerRowView({
       </td>
       <td className="muted">{fmtDur(v.durationSec)}</td>
       <td>{fmtDur(row.estimatedSeconds)}</td>
-      <td>
-        {tier ? (
-          <span
-            className="valuetier"
-            title={`${tier.name} — value ${tier.valueScore}/5 (0 = brain rot, 5 = deep learning)`}
-          >
-            <span className="swatch" style={{ background: tier.color }} />
-            <b>{tier.valueScore}/5</b>
-            <span className="muted small">{tier.name}</span>
-          </span>
-        ) : (
-          <span className="muted small" title="Uncategorized — no value tier yet">
-            —
-          </span>
-        )}
-      </td>
       <td className="muted" title={`estimate confidence: ${row.confidence}`}>
         <span className={"dot " + row.confidence}></span>
       </td>

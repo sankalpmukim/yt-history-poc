@@ -13,7 +13,9 @@ export interface Category {
   name: string
   emoji: string
   color: string
+  /** Internal derived score for legacy calculations and backup compatibility. */
   valueScore: ValueScore
+  /** Visible ladder position, highest-value first. */
   order: number
   archivedAt?: string
 }
@@ -24,6 +26,8 @@ export interface Subcategory {
   parentId: string
   name: string
   emoji: string
+  /** Optional per-subcategory accent; older backups inherit the parent color. */
+  color?: string
   order: number
   archivedAt?: string
 }

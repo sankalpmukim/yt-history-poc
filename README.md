@@ -17,7 +17,7 @@ YT Ledger is a Chromium browser extension (Manifest V3, built with [Plasmo](http
 
 ## Features
 
-- **Value-scored categories.** Eight default categories scored 0–5, from *Brain rot* through *News & updates* and *Practical how-tos* to *Courses & lectures*. Rename, recolor, rescore, reorder or archive any of them.
+- **A value ladder you can shape.** Eight editable default categories, with value derived from their position. Search, create, rename, recolor, reorder by dragging, or archive categories and subcategories directly while categorizing.
 - **Subcategories.** Editable subcategories under every category (e.g. *Practical how-tos › Coding*), with sensible defaults. Charts show top-level categories and drill down in place.
 - **Auto-categorization rules.** Match by exact channel, channel substring, title keywords, title regex, Shorts and maximum duration. Rules run in priority order (first match wins) and can target a category or a subcategory. Test a rule against your history before saving. Manual categorization always wins over rules.
 - **Ledger.** Every watch event grouped by day, with search, category/subcategory filters, an "uncategorized only" review queue, inline categorization, and bulk edits.

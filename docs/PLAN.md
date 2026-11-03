@@ -5,7 +5,7 @@ Decisions marked ✅ were confirmed 2026-11-02; implementation proceeds phase by
 phase (see Milestones).
 
 Mental model: **watch events = transactions · categories = spending categories ·
-value score = the inverse of cost · budgets = time budgets.**
+category position expresses value · budgets = time budgets.**
 
 ---
 
@@ -31,7 +31,7 @@ value score = the inverse of cost · budgets = time budgets.**
 
 - **Categorize** every video watched (auto via rules, manual overrides always win).
 - **See where the time goes**: today / 7d / 30d / all-time dashboards, per-category time, share, trends, top channels.
-- **Value spectrum**: every category has a value score 0–5; the product surfaces "time value index" and low-value share (the "how much did I waste" number).
+- **Value spectrum**: category value is derived from position in the ladder (higher-value at the top, lower-value at the bottom). The product surfaces a time value index and lower-value share; the internal 0–5 score is retained for calculations and compatibility, not shown or edited.
 - **Insights**: worst offenders, best-value channels, weekday patterns. ✅ in scope (phase M6).
 - **Budgets**: weekly time budgets per category ✅ in scope (phase M7) **with enforcement on YouTube itself** ✅ (phase M8):
   - **Off** (default until configured), **Gentle**, **Strict** — see §4.5.
@@ -41,18 +41,18 @@ value score = the inverse of cost · budgets = time budgets.**
 
 ## 3. Default categories (editable, reorderable, extendable)
 
-| # | id | Emoji | Name | Score | Examples |
-|---|---|---|---|---|---|
-| 0 | `brain-rot` | 🧟 | Brain rot | 0 | Shorts binges, memes, drama, reaction clips |
-| 1 | `junk-fun` | 🍿 | Mindless entertainment | 1 | Compilations, fails, background noise TV |
-| 2 | `fun` | 🎬 | Intentional entertainment | 2 | Films, series, music, chosen gaming sessions |
-| 3 | `talk-fun` | 🎙️ | Recreational talk | 3 | Podcasts, interviews, commentary for fun |
-| 4 | `news` | 📰 | News & updates | 3 | News clips, current events, sports highlights |
-| 5 | `informative` | 🧠 | Informative talk | 4 | Intellectual podcasts, video essays, explainers |
-| 6 | `practical` | 🛠️ | Practical how-tos | 4 | Tutorials, cooking, DIY, purchase research |
-| 7 | `deep` | 🎓 | Courses & lectures | 5 | Lectures, courses, conference talks, documentaries |
+| id | Emoji | Name | Examples |
+|---|---|---|---|
+| `deep` | 🎓 | Courses & lectures | Lectures, courses, conference talks, documentaries |
+| `practical` | 🛠️ | Practical how-tos | Tutorials, cooking, DIY, purchase research |
+| `informative` | 🧠 | Informative talk | Intellectual podcasts, video essays, explainers |
+| `news` | 📰 | News & updates | News clips, current events, sports highlights |
+| `talk-fun` | 🎙️ | Recreational talk | Podcasts, interviews, commentary for fun |
+| `fun` | 🎬 | Intentional entertainment | Films, series, music, chosen gaming sessions |
+| `junk-fun` | 🍿 | Mindless entertainment | Compilations, fails, background noise TV |
+| `brain-rot` | 🧟 | Brain rot | Shorts binges, memes, drama, reaction clips |
 
-- Users can rename, re-score, re-color, add, archive, and reorder categories. New categories can slot anywhere on the 0–5 ladder.
+- Users can rename, re-color, add, archive, and drag-reorder categories. The visible ladder runs high-to-low; position derives the internal score on the existing scale. Categories can be created and edited from any category picker.
 - **Subcategories** (expense-manager style, ✅ 2026-11-02): each top-level category has editable, reorderable, archivable subcategories (same customizability as categories). Videos and rules assign to a **subcategory or the parent** (when no sub fits). Charts show **top-level by default**; click a category to drill into its subs (with a back control). Pickers, Ledger chips, and rule targets show `Parent › Sub` (e.g. `Practical how-tos › Coding`). Budgets stay **top-level** (sub time rolls up). Stored as `yl.v2.subcategories`; existing category-level assignments keep working. Default subs ship with the 8 parents; onboarding can tweak names.
 - "Uncategorized" is a first-class bucket surfaced as a review queue (never silently assigned).
 - ✅ **Onboarding (first install)** walks the user through categories + starter
@@ -74,7 +74,7 @@ can be added later once the build issue is resolved or Node ≤22 is used.
 
 **A. Overview**
 - Range switcher: Today · 7d · 30d · 90d · All.
-- Stat cards: total est. watch time, avg/day, # videos watched, **time value index** (0–5), % time in score ≤1 categories ("brain-rot share"), uncategorized count.
+- Stat cards: total est. watch time, avg/day, # videos watched, **time value index**, % time in lower-value categories ("brain-rot share"), uncategorized count.
 - **Trend**: stacked daily bars by category (the expense-manager "spending over time" chart).
 - **Breakdown**: donut + ranked list per category — hours, % share, top channels in each.
 - **Review queue** card: latest uncategorized videos with inline category chips + "assign all from this channel" shortcut.
@@ -89,7 +89,7 @@ can be added later once the build issue is resolved or Node ≤22 is used.
 - Rule editor with **test-run**: shows how many stored videos currently match before saving.
 - The heart of the product (per ✅ decision 4): fast, obvious rule creation/management.
 
-**D. Categories** (manager: create/edit/archive/reorder, color + emoji + score).
+**D. Categories** (manager: create/edit/archive/reorder, color + emoji; drag and keyboard reorder).
 
 **E. Settings**
 - ✅ **Sync**: automatic syncs look back **14 days**; a **"Refresh / Sync now"** button usable anytime, with a **"more options"** control to pick a shorter or longer lookback for that manual sync (7 / 14 / 30 / 60 / 90 days).
@@ -147,7 +147,7 @@ status:
 Runs on first dashboard open after install (dashboard exists from M4; until
 then the fallback defaults of §3/§5 apply silently):
 1. Welcome + "this is local-only" privacy note.
-2. Category ladder walkthrough: rename/reorder/remove, see the 0–5 spectrum.
+2. Category ladder walkthrough: rename/reorder/remove; value follows position, with higher-value categories at the top.
 3. Starter rules: pick from suggested keyword rules (shown with live match
    counts against existing history), or start clean.
 4. Budget mode choice (off/gentle/strict) — skippable.
@@ -198,7 +198,8 @@ let the dashboard read categories/rules without pulling events.
 ```ts
 interface Category {
   id: string; name: string; emoji: string; color: string;
-  valueScore: 0|1|2|3|4|5; order: number; archivedAt?: string
+  valueScore: 0|1|2|3|4|5; // internal, derived from high-to-low position; retained for backup compatibility
+  order: number; archivedAt?: string
 }
 
 interface Rule {
@@ -255,6 +256,9 @@ interface Settings {
 ```
 
 Category resolution for display: `categoryOverride ?? autoCategoryId ?? uncategorized`.
+On dashboard load, legacy category scores are used to establish high-to-low
+position once; thereafter the existing `valueScore` field is derived from that
+position. The v2 schema stays backward compatible and legacy backups remain importable.
 Events inherit their video's category (v1 has no per-event overrides — intent rarely changes per rewatch; revisit if needed).
 
 Size math: ~250 B/video + ~150 B/event; a heavy year ≈ 20k events ≈ 4–5 MB across shards — fine with `unlimitedStorage`.

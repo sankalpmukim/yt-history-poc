@@ -14,11 +14,12 @@ test("default categories: unique ids, ordered ladder, sane scores", () => {
     assert.ok(c.valueScore >= 0 && c.valueScore <= 5, `${c.id} score in range`)
     assert.ok(c.name.length > 0 && c.color.startsWith("#"))
   }
-  // the approved ladder, lowest → highest value
+  // the visible ladder is highest → lowest value
   assert.deepEqual(
     DEFAULT_CATEGORIES.map((c) => c.id),
-    ["brain-rot", "junk-fun", "fun", "talk-fun", "news", "informative", "practical", "deep"]
+    ["deep", "practical", "informative", "news", "talk-fun", "fun", "junk-fun", "brain-rot"]
   )
+  assert.deepEqual(DEFAULT_CATEGORIES.map((c) => c.valueScore), [5, 4, 4, 3, 2, 1, 1, 0])
 })
 
 test("fallback starter rules reference live category or subcategory targets", () => {

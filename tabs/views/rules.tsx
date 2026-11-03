@@ -8,7 +8,8 @@ import { compileRules, previewMatches, describeMatch } from "../../core/rules"
 import { validTargetIds } from "../../core/taxonomy"
 import { runRulesPass } from "../../core/ledger"
 import { ChromeKV } from "../../core/storage"
-import { CategoryChip } from "../lib/ui"
+import { CategoryChip, TaxonomyPicker } from "../lib/ui"
+import { labelForTarget } from "../../core/taxonomy"
 
 const BLANK_MATCH: RuleMatch = {}
 
@@ -154,6 +155,7 @@ export function RulesView({ data, reload }: { data: LedgerData; reload: () => Pr
         <RuleEditor
           rule={editing}
           data={data}
+          reload={reload}
           onSave={save}
           onClose={() => setEditing(null)}
         />
@@ -165,17 +167,20 @@ export function RulesView({ data, reload }: { data: LedgerData; reload: () => Pr
 function RuleEditor({
   rule,
   data,
+  reload,
   onSave,
   onClose
 }: {
   rule: Rule
   data: LedgerData
+  reload: () => Promise<void>
   onSave: (r: Rule) => Promise<void>
   onClose: () => void
 }) {
   const [draft, setDraft] = useState<Rule>({ ...rule, match: { ...rule.match } })
   const [preview, setPreview] = useState<{ count: number; sampleIds: string[] } | null>(null)
   const [regexError, setRegexError] = useState<string | null>(null)
+  const [targetPickerOpen, setTargetPickerOpen] = useState(false)
 
   const setMatch = (patch: Partial<RuleMatch>) =>
     setDraft((d) => ({ ...d, match: { ...d.match, ...patch } }))
@@ -210,26 +215,12 @@ function RuleEditor({
             <input type="text" style={{ width: "100%" }} value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
           </label>
-          <label className="small">
-            Category
-            <select style={{ width: "100%" }} value={draft.categoryId}
-              onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}>
-              <option value="" disabled>choose…</option>
-              {data.categories.filter((c) => !c.archivedAt).map((c) => (
-                <optgroup key={c.id} label={`${c.emoji} ${c.name}`}>
-                  <option value={c.id}>{c.name} (parent)</option>
-                  {data.subcategories
-                    .filter((s) => s.parentId === c.id && !s.archivedAt)
-                    .sort((a, b) => a.order - b.order)
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {c.name} › {s.name}
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
-            </select>
-          </label>
+          <div className="small">
+            <span>Category</span>
+            <button type="button" className="btn" style={{ width: "100%", textAlign: "left" }} onClick={() => setTargetPickerOpen(true)} aria-label="Choose rule category">
+              {draft.categoryId ? labelForTarget(draft.categoryId, data.categories, data.subcategories) : "Choose category or subcategory…"}
+            </button>
+          </div>
           <div className="muted small" style={{ marginTop: 4 }}>All chosen conditions must hold (AND).</div>
           <label className="small">
             Channel is exactly
@@ -294,6 +285,20 @@ function RuleEditor({
             </label>
           </div>
         </div>
+        {targetPickerOpen ? (
+          <TaxonomyPicker
+            title="Choose rule target"
+            categories={data.categories}
+            subcategories={data.subcategories}
+            current={draft.categoryId || null}
+            reload={reload}
+            onChoose={({ categoryId }) => {
+              if (categoryId) setDraft((current) => ({ ...current, categoryId }))
+              setTargetPickerOpen(false)
+            }}
+            onClose={() => setTargetPickerOpen(false)}
+          />
+        ) : null}
 
         {regexError ? <div className="small" style={{ color: "var(--danger)", marginTop: 8 }}>{regexError}</div> : null}
         {preview ? (
