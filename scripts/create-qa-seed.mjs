@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 
 const output = resolve(process.argv[2] ?? "fixtures/qa-seed.json")
+const liveOutput = resolve(process.argv[3] ?? "fixtures/qa-seed-live.json")
 const now = new Date()
 const monday = new Date(now)
 monday.setHours(0, 0, 0, 0)
@@ -85,6 +86,11 @@ function sample(id, title, durationSec, secondsProgress, categoryId, ruleId) {
   }
 }
 
+function writeBackup(path, backup) {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, `${JSON.stringify(backup, null, 2)}\n`)
+}
+
 const samples = [
   sample("ylqa0000001", "QA seed: airline fleet news", 900, 100, "news-world", rules[0].id),
   sample("ylqa0000002", "QA seed: aircraft industry update", 900, 100, "news-world", rules[0].id),
@@ -122,6 +128,76 @@ const backup = {
   }
 }
 
-mkdirSync(dirname(output), { recursive: true })
-writeFileSync(output, `${JSON.stringify(backup, null, 2)}\n`)
+writeBackup(output, backup)
 console.log(`Wrote ${output} (week starts ${watchedOn}; News budget 60s, seeded spend 1800s).`)
+
+// The live fixture classifies arbitrary visible YouTube titles, so the seeded
+// IDs need not appear in the user's feed. The narrow channel rule sorts first;
+// ordinary items from every other channel fall through to the title catch-all.
+const liveChannelCategory = {
+  id: "qa-live-channel",
+  name: "QA · Channel match",
+  emoji: "📡",
+  color: "#d97706",
+  valueScore: 2,
+  order: 3
+}
+const liveTitleCategory = {
+  id: "qa-live-title",
+  name: "QA · Other live titles",
+  emoji: "▶️",
+  color: "#0891b2",
+  valueScore: 1,
+  order: 4
+}
+const liveRules = [
+  {
+    id: "qa-live-channel-match",
+    name: "QA live: channel contains NASA",
+    enabled: true,
+    priority: 1,
+    match: { channelContains: "NASA" },
+    categoryId: liveChannelCategory.id,
+    createdAt: iso,
+    updatedAt: iso,
+    hitCount: 0
+  },
+  {
+    id: "qa-live-title-catchall",
+    name: "QA live: nearly every title",
+    enabled: true,
+    priority: 10,
+    match: { titleRegex: ".", titleRegexFlags: "i" },
+    categoryId: liveTitleCategory.id,
+    createdAt: iso,
+    updatedAt: iso,
+    hitCount: 0
+  }
+]
+const liveSamples = [
+  sample("ylqlive0001", "QA live seed: channel match spend A", 900, 100, liveChannelCategory.id, liveRules[0].id),
+  sample("ylqlive0002", "QA live seed: channel match spend B", 900, 100, liveChannelCategory.id, liveRules[0].id),
+  sample("ylqlive0003", "QA live seed: title match spend A", 900, 100, liveTitleCategory.id, liveRules[1].id),
+  sample("ylqlive0004", "QA live seed: title match spend B", 900, 100, liveTitleCategory.id, liveRules[1].id)
+]
+// Give the seeded channel samples the same visible channel that the live rule
+// targets; all other fields and the original deterministic fixture stay intact.
+for (const { video } of liveSamples.slice(0, 2)) video.channel = "NASA"
+const liveBackup = structuredClone(backup)
+liveBackup.data.categories.push(liveChannelCategory, liveTitleCategory)
+liveBackup.data.rules = [...liveRules, ...liveBackup.data.rules]
+liveBackup.data.videos = {
+  ...liveBackup.data.videos,
+  ...Object.fromEntries(liveSamples.map(({ video }) => [video.videoId, video]))
+}
+liveBackup.data.events = {
+  ...liveBackup.data.events,
+  ...Object.fromEntries(liveSamples.map(({ event }) => [event.key, event]))
+}
+liveBackup.data.meta.settings.budgetsWeekly = {
+  ...liveBackup.data.meta.settings.budgetsWeekly,
+  [liveChannelCategory.id]: 60,
+  [liveTitleCategory.id]: 60
+}
+writeBackup(liveOutput, liveBackup)
+console.log(`Wrote ${liveOutput} (both live-rule categories budgeted at 60s with 1800s seeded spend each).`)

@@ -14,23 +14,35 @@ seeded once. Ledger also shows the value tier; budget modes use an accessible,
 live-updating segmented control. Day-label parsing has explicit year-boundary
 coverage and correctly interprets labels such as `Oct 31`.
 
-## Deterministic budget-guard QA seed
+## Budget-guard QA fixtures
 
-Run `pnpm qa:seed` to refresh `fixtures/qa-seed.json` with sample events dated
+Run `pnpm qa:seed` to refresh both fixtures. `fixtures/qa-seed.json` contains sample events dated
 in the current local week, a 60-second News budget, 30 minutes of seeded
-News › World news watch time, subcategories, and channel/title rules. In YT
-Ledger, export your current JSON backup first. In **Settings → Data**, select
-`fixtures/qa-seed.json` with **Import JSON**, or open the fixture in a text editor
-and paste it into **Import from pasted JSON**. Both routes validate the same
+News › World news watch time, subcategories, and channel/title rules. Use this
+fixture to exercise the regular seeded-data flow described below.
+
+`fixtures/qa-seed-live.json` adds two live-test categories, each with a 60-second
+weekly budget and 30 minutes of seeded spend. Its enabled title rule matches
+nearly every non-empty live title (`.`); a higher-priority channel-substring rule
+routes NASA-channel items to the second category before the catch-all can match.
+Since both categories are already over budget, regular videos on any channel
+exercise the title rule, while NASA-channel videos exercise the channel rule.
+
+For either fixture, export your current JSON backup first. In YT Ledger, open
+**Settings → Data** and select the fixture with **Import JSON**, or paste its
+contents into **Import from pasted JSON**. Both routes validate the same
 backup format, ask for confirmation, and replace the current ledger. **Copy
 export JSON to clipboard** provides the matching no-file-dialog backup path.
-The seed selects Strict mode; Settings → Budgets
-should show News over budget. On YouTube, search for **Simple Flying** to test
-matching result placeholders; Home and sidebar cards use the same guard when
-matching channel videos appear. Click a feed veil to reveal its card. Watch
-pages retain the separate **Watch anyway** interstitial. Import your exported
-backup afterward to restore your data. Synthetic video IDs are ledger-only;
-the channel rule classifies real search results.
+Both fixtures select Strict mode; switch to Gentle or Strict in **Settings →
+Budgets** to test each presentation. With the live fixture, test Home feed cards,
+Search results, the watch-page related-video sidebar, and a watch page itself:
+the guard reads the visible title/channel, so seeded synthetic video IDs do not
+need to appear on YouTube. A NASA-channel item tests the channel rule; any
+non-empty title from another channel tests the catch-all rule. Strict feed veils can be clicked to reveal a card;
+the watch-page interstitial has a **Watch anyway** action, while Gentle uses a
+dismissible banner. The original fixture still lets you search for **Simple
+Flying** and test its channel-rule match. Import your exported backup afterward
+to restore your data.
 
 **Status: M8 complete** — everything in M7 plus **on-YouTube budget
 enforcement** (`contents/budget-guard.ts`): Off (default, zero DOM changes),

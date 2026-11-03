@@ -97,6 +97,51 @@ test("live rules classify unseen videos; unknown stays null (fail-open)", () => 
   )
 })
 
+test("live guard classification uses visible title and channel with channel rule precedence", () => {
+  const compiled = compileRules(
+    [
+      rule({
+        id: "channel-first",
+        priority: 1,
+        match: { channelContains: "NASA" },
+        categoryId: "practical"
+      }),
+      rule({
+        id: "title-catchall",
+        priority: 10,
+        match: { titleRegex: ".", titleRegexFlags: "i" },
+        categoryId: "fun"
+      })
+    ],
+    CATS
+  )
+
+  assert.equal(
+    classifyForBudget(
+      { stored: undefined, title: "Artemis mission update", channel: "NASA", durationSec: 900, isShort: false },
+      compiled
+    ),
+    "practical",
+    "the channel substring rule wins even though the title catch-all also matches"
+  )
+  assert.equal(
+    classifyForBudget(
+      { stored: undefined, title: "A cooking video", channel: "Other channel", durationSec: 900, isShort: false },
+      compiled
+    ),
+    "fun",
+    "the title regex classifies ordinary visible titles from unmatched channels"
+  )
+  assert.equal(
+    classifyForBudget(
+      { stored: undefined, title: "", channel: "Other channel", durationSec: 900, isShort: false },
+      compiled
+    ),
+    null,
+    "empty titles do not match the catch-all regex"
+  )
+})
+
 test("uncategorized stored video still gets a live-rule match from DOM facts", () => {
   const compiled = compileRules(
     [rule({ match: { isShort: true }, categoryId: "brain-rot" })],
