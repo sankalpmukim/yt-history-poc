@@ -8,7 +8,7 @@ import { compileRules, previewMatches, describeMatch } from "../../core/rules"
 import { validTargetIds } from "../../core/taxonomy"
 import { runRulesPass } from "../../core/ledger"
 import { ChromeKV } from "../../core/storage"
-import { CategoryChip, TaxonomyPicker } from "../lib/ui"
+import { CategoryChip, Dialog, TaxonomyPicker, plural } from "../lib/ui"
 import { labelForTarget } from "../../core/taxonomy"
 
 const BLANK_MATCH: RuleMatch = {}
@@ -83,77 +83,68 @@ export function RulesView({ data, reload }: { data: LedgerData; reload: () => Pr
 
   return (
     <div>
-      <div className="spread" style={{ marginBottom: 8 }}>
+      <div className="page-head">
         <h1>Rules</h1>
-        <button className="btn btn-primary" onClick={() => setEditing(newRule(new Date()))}>
-          + New rule
+        <button type="button" className="btn btn-primary" onClick={() => setEditing(newRule(new Date()))}>
+          New rule
         </button>
       </div>
-      <p className="hint">
-        Applied top-down on every sync — first match wins. Priority number = position (smaller is
-        higher). Manual video overrides always beat rules.
+      <p className="lede">
+        Rules sort new videos into categories on every sync. They run top to bottom and the first
+        match wins. A category you choose yourself always beats a rule.
       </p>
 
-      <div className="card">
+      <section className="card" aria-label="Rules, in the order they run">
         {rules.length === 0 ? (
-          <div className="empty">No rules yet — create one, or use the Ledger’s “always for this channel”.</div>
+          <p className="empty">No rules yet. Create one, or choose a video’s category in the Ledger and tick “Use this for every video from” its channel.</p>
         ) : (
-          rules.map((r, i) => {
-            const dead = r.categoryId && !liveTargets.has(r.categoryId)
-            return (
-              <div key={r.id} className="queueitem" style={{ flexWrap: "wrap" }}>
-                <input type="checkbox" checked={r.enabled} onChange={() => void toggle(r)} title="enabled" />
-                <div style={{ width: 46 }} className="muted small">
-                  #{i + 1}
-                </div>
-                <div style={{ minWidth: 220, flex: 1 }}>
-                  <div>{r.name || <span className="muted">(unnamed)</span>}</div>
-                  <div className="muted small">{describeMatch(r.match)}</div>
-                  {dead ? <div className="small" style={{ color: "var(--danger)" }}>target no longer exists — skipped</div> : null}
-                </div>
-                <span className="muted small" title="videos currently assigned by this rule">
-                  {r.hitCount} video(s)
-                </span>
-                <CategoryChip
-                  targetId={r.categoryId}
-                  categories={data.categories}
-                  subcategories={data.subcategories}
-                  onClick={() => setEditing(r)}
-                />
-                <span className="row">
-                  <button className="btn btn-sm" disabled={i === 0} onClick={() => void move(r, -1)}>
-                    ↑
-                  </button>
-                  <button className="btn btn-sm" disabled={i === rules.length - 1} onClick={() => void move(r, 1)}>
-                    ↓
-                  </button>
-                  <button className="btn btn-sm" onClick={() => setEditing(r)}>
-                    Edit
-                  </button>
+          <ol className="list">
+            {rules.map((r, i) => {
+              const dead = r.categoryId && !liveTargets.has(r.categoryId)
+              const name = r.name || "Untitled rule"
+              return (
+                <li key={r.id} className={"queueitem" + (r.enabled ? "" : " item-off")} style={{ flexWrap: "wrap" }}>
+                  <input type="checkbox" checked={r.enabled} onChange={() => void toggle(r)} aria-label={`Use rule ${name}`} />
+                  <span className="item-index" aria-hidden="true">{i + 1}</span>
+                  <div className="item-main">
+                    <div className="item-title">{name}{r.enabled ? null : <span className="tag">Off</span>}</div>
+                    <div className="item-sub">{describeMatch(r.match)}</div>
+                    {dead ? <div className="small text-danger" style={{ marginTop: 4 }}>Its category is archived, so this rule is skipped. Edit it to pick another.</div> : null}
+                  </div>
+                  <span className="item-meta" title="Videos this rule currently categorizes">
+                    {r.hitCount > 0 ? plural(r.hitCount, "video") : "No videos yet"}
+                  </span>
+                  <CategoryChip
+                    targetId={r.categoryId}
+                    categories={data.categories}
+                    subcategories={data.subcategories}
+                    onClick={() => setEditing(r)}
+                  />
                   {confirmDelete === r.id ? (
-                    <>
-                      <button className="btn btn-sm btn-danger" onClick={() => void remove(r.id)}>
-                        really delete
-                      </button>
-                      <button className="btn btn-sm" onClick={() => setConfirmDelete(null)}>
-                        no
-                      </button>
-                    </>
+                    <span className="confirm">
+                      <span className="confirm-text small">Delete this rule?</span>
+                      <button type="button" className="btn btn-sm btn-danger" onClick={() => void remove(r.id)}>Delete rule</button>
+                      <button type="button" className="btn btn-sm btn-quiet" autoFocus onClick={() => setConfirmDelete(null)}>Cancel</button>
+                    </span>
                   ) : (
-                    <button className="btn btn-sm" onClick={() => setConfirmDelete(r.id)}>
-                      Delete
-                    </button>
+                    <span className="item-actions">
+                      <button type="button" className="btn btn-sm btn-quiet btn-icon" aria-label={`Move ${name} up`} disabled={i === 0} onClick={() => void move(r, -1)}>↑</button>
+                      <button type="button" className="btn btn-sm btn-quiet btn-icon" aria-label={`Move ${name} down`} disabled={i === rules.length - 1} onClick={() => void move(r, 1)}>↓</button>
+                      <button type="button" className="btn btn-sm btn-quiet" onClick={() => setEditing(r)}>Edit</button>
+                      <button type="button" className="btn btn-sm btn-quiet" onClick={() => setConfirmDelete(r.id)}>Delete</button>
+                    </span>
                   )}
-                </span>
-              </div>
-            )
-          })
+                </li>
+              )
+            })}
+          </ol>
         )}
-      </div>
+      </section>
 
       {editing ? (
         <RuleEditor
           rule={editing}
+          isNew={!data.rules.some((r) => r.id === editing.id)}
           data={data}
           reload={reload}
           onSave={save}
@@ -166,12 +157,14 @@ export function RulesView({ data, reload }: { data: LedgerData; reload: () => Pr
 
 function RuleEditor({
   rule,
+  isNew,
   data,
   reload,
   onSave,
   onClose
 }: {
   rule: Rule
+  isNew: boolean
   data: LedgerData
   reload: () => Promise<void>
   onSave: (r: Rule) => Promise<void>
@@ -179,23 +172,29 @@ function RuleEditor({
 }) {
   const [draft, setDraft] = useState<Rule>({ ...rule, match: { ...rule.match } })
   const [preview, setPreview] = useState<{ count: number; sampleIds: string[] } | null>(null)
-  const [regexError, setRegexError] = useState<string | null>(null)
+  const [problem, setProblem] = useState<string | null>(null)
   const [targetPickerOpen, setTargetPickerOpen] = useState(false)
 
   const setMatch = (patch: Partial<RuleMatch>) =>
     setDraft((d) => ({ ...d, match: { ...d.match, ...patch } }))
 
   const runPreview = () => {
-    setRegexError(null)
+    setProblem(null)
+    setPreview(null)
     try {
       if (draft.match.titleRegex) new RegExp(draft.match.titleRegex, draft.match.titleRegexFlags ?? "")
     } catch (e: any) {
-      setRegexError(String(e?.message ?? e))
+      setProblem(`The title regex isn’t valid: ${String(e?.message ?? e)}`)
       return
     }
-    const compiled = compileRules([draft], validTargetIds(data.categories, data.subcategories))
+    if (!draft.categoryId) {
+      setProblem("Choose a category for this rule first.")
+      return
+    }
+    const compiled = compileRules([{ ...draft, enabled: true }], validTargetIds(data.categories, data.subcategories))
     if (compiled.length === 0) {
-      setRegexError("rule is unusable (bad regex, disabled, or unknown category)")
+      const live = validTargetIds(data.categories, data.subcategories)
+      setProblem(live.has(draft.categoryId) ? "Add at least one condition so the rule knows what to match." : "Its category is archived. Choose another one.")
       return
     }
     setPreview(previewMatches(compiled, Object.values(data.videos)))
@@ -203,119 +202,121 @@ function RuleEditor({
 
   const sampleTitles = (preview?.sampleIds ?? [])
     .map((id) => data.videos[id]?.title ?? id)
-    .slice(0, 5)
+    .slice(0, 3)
 
   return (
-    <div className="overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="menu" style={{ width: 560 }}>
-        <h3>{rule.name ? `Edit “${rule.name}”` : "New rule"}</h3>
-        <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-          <label className="small">
-            Name
-            <input type="text" style={{ width: "100%" }} value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          </label>
-          <div className="small">
-            <span>Category</span>
-            <button type="button" className="btn" style={{ width: "100%", textAlign: "left" }} onClick={() => setTargetPickerOpen(true)} aria-label="Choose rule category">
-              {draft.categoryId ? labelForTarget(draft.categoryId, data.categories, data.subcategories) : "Choose category or subcategory…"}
-            </button>
-          </div>
-          <div className="muted small" style={{ marginTop: 4 }}>All chosen conditions must hold (AND).</div>
-          <label className="small">
-            Channel is exactly
-            <input type="text" style={{ width: "100%" }} placeholder="e.g. FORMULA 1"
-              value={draft.match.channelEquals ?? ""}
-              onChange={(e) => setMatch({ channelEquals: e.target.value || undefined })} />
-          </label>
-          <label className="small">
-            Channel contains
-            <input type="text" style={{ width: "100%" }} placeholder="substring"
-              value={draft.match.channelContains ?? ""}
-              onChange={(e) => setMatch({ channelContains: e.target.value || undefined })} />
-          </label>
-          <label className="small">
-            Title contains (comma-separated, any-of)
-            <input type="text" style={{ width: "100%" }} placeholder="tutorial, how to"
-              value={(draft.match.titleContains ?? []).join(", ")}
-              onChange={(e) =>
-                setMatch({
-                  titleContains: e.target.value.split(",").map((s) => s.trim()).filter(Boolean)
-                })
-              } />
-          </label>
-          <div className="row">
-            <label className="small" style={{ flex: 1 }}>
-              Title regex
-              <input type="text" style={{ width: "100%" }} placeholder="\\b(lecture|talk)\\b"
-                value={draft.match.titleRegex ?? ""}
-                onChange={(e) => setMatch({ titleRegex: e.target.value || undefined })} />
-            </label>
-            <label className="small" style={{ width: 70 }}>
-              Flags
-              <input type="text" style={{ width: "100%" }} placeholder="i"
-                value={draft.match.titleRegexFlags ?? ""}
-                onChange={(e) => setMatch({ titleRegexFlags: e.target.value || undefined })} />
-            </label>
-          </div>
-          <div className="row">
-            <label className="small">
-              Shorts
-              <select value={draft.match.isShort == null ? "" : String(draft.match.isShort)}
-                onChange={(e) =>
-                  setMatch({ isShort: e.target.value === "" ? undefined : e.target.value === "true" })
-                }>
-                <option value="">any</option>
-                <option value="true">only Shorts</option>
-                <option value="false">not Shorts</option>
-              </select>
-            </label>
-            <label className="small">
-              Duration ≤ (sec)
-              <input type="number" min={0} style={{ width: 90 }}
-                value={draft.match.maxDurationSec ?? ""}
-                onChange={(e) =>
-                  setMatch({ maxDurationSec: e.target.value === "" ? undefined : Number(e.target.value) })
-                } />
-            </label>
-            <label className="small">
-              Priority
-              <input type="number" style={{ width: 80 }} value={draft.priority}
-                onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) || 0 })} />
-            </label>
-          </div>
-        </div>
-        {targetPickerOpen ? (
-          <TaxonomyPicker
-            title="Choose rule target"
-            categories={data.categories}
-            subcategories={data.subcategories}
-            current={draft.categoryId || null}
-            reload={reload}
-            onChoose={({ categoryId }) => {
-              if (categoryId) setDraft((current) => ({ ...current, categoryId }))
-              setTargetPickerOpen(false)
-            }}
-            onClose={() => setTargetPickerOpen(false)}
-          />
-        ) : null}
-
-        {regexError ? <div className="small" style={{ color: "var(--danger)", marginTop: 8 }}>{regexError}</div> : null}
-        {preview ? (
-          <div className="small" style={{ marginTop: 8, color: preview.count > 0 ? "var(--ok)" : "var(--muted)" }}>
-            Would currently match <b>{preview.count}</b> stored video(s)
-            {sampleTitles.length > 0 ? ` — e.g. “${sampleTitles.join("”, “")}”` : ""}
-          </div>
-        ) : null}
-
-        <div className="row" style={{ marginTop: 14, justifyContent: "flex-end" }}>
-          <button className="btn" onClick={runPreview}>Test run</button>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={!draft.categoryId} onClick={() => void onSave(draft)}>
-            Save rule
+    <Dialog labelledBy="rule-editor-title" onClose={onClose} className="menu-wide">
+      <h3 id="rule-editor-title">{isNew ? "New rule" : `Edit “${rule.name || "Untitled rule"}”`}</h3>
+      <div style={{ display: "grid", gap: 16 }}>
+        <label className="field">
+          Name
+          <input type="text" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+        </label>
+        <div className="field">
+          <span id="rule-category-label">Category</span>
+          <button
+            type="button"
+            className="btn"
+            style={{ justifyContent: "flex-start" }}
+            onClick={() => setTargetPickerOpen(true)}
+            aria-label={`Choose rule category${draft.categoryId ? `: ${labelForTarget(draft.categoryId, data.categories, data.subcategories)}` : ""}`}
+          >
+            {draft.categoryId ? labelForTarget(draft.categoryId, data.categories, data.subcategories) : "Choose a category or subcategory…"}
           </button>
         </div>
       </div>
-    </div>
+
+      <fieldset className="fieldset">
+        <legend>Matches videos where all of these are true</legend>
+        <div className="field-row">
+          <label className="field field-grow">
+            Channel is exactly
+            <input type="text" placeholder="FORMULA 1" value={draft.match.channelEquals ?? ""}
+              onChange={(e) => setMatch({ channelEquals: e.target.value || undefined })} />
+          </label>
+          <label className="field field-grow">
+            Channel contains
+            <input type="text" placeholder="Part of a channel name" value={draft.match.channelContains ?? ""}
+              onChange={(e) => setMatch({ channelContains: e.target.value || undefined })} />
+          </label>
+        </div>
+        <label className="field">
+          Title contains any of
+          <input type="text" aria-describedby="title-contains-hint" placeholder="tutorial, how to"
+            value={(draft.match.titleContains ?? []).join(", ")}
+            onChange={(e) => setMatch({ titleContains: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
+          <span id="title-contains-hint" className="field-hint">Separate words with commas.</span>
+        </label>
+        <div className="field-row">
+          <label className="field field-grow">
+            Title regex
+            <input type="text" placeholder="\b(lecture|talk)\b" value={draft.match.titleRegex ?? ""}
+              onChange={(e) => setMatch({ titleRegex: e.target.value || undefined })} />
+          </label>
+          <label className="field" style={{ width: 64 }}>
+            Flags
+            <input type="text" placeholder="i" value={draft.match.titleRegexFlags ?? ""}
+              onChange={(e) => setMatch({ titleRegexFlags: e.target.value || undefined })} />
+          </label>
+        </div>
+        <div className="field-row">
+          <label className="field">
+            Shorts
+            <select value={draft.match.isShort == null ? "" : String(draft.match.isShort)}
+              onChange={(e) => setMatch({ isShort: e.target.value === "" ? undefined : e.target.value === "true" })}>
+              <option value="">Any video</option>
+              <option value="true">Only Shorts</option>
+              <option value="false">No Shorts</option>
+            </select>
+          </label>
+          <label className="field">
+            Max length in seconds
+            <input type="number" min={0} style={{ width: 128 }} value={draft.match.maxDurationSec ?? ""}
+              onChange={(e) => setMatch({ maxDurationSec: e.target.value === "" ? undefined : Number(e.target.value) })} />
+          </label>
+          <label className="field">
+            Priority
+            <input type="number" style={{ width: 96 }} aria-describedby="priority-hint" value={draft.priority}
+              onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) || 0 })} />
+          </label>
+        </div>
+        <span id="priority-hint" className="field-hint small muted">Sets the rule’s place in the list: lower numbers run first.</span>
+      </fieldset>
+
+      <div role="status" aria-live="polite">
+        {problem ? <div className="preview error">{problem}</div> : null}
+        {preview ? (
+          <div className="preview">
+            {preview.count > 0
+              ? <>Matches {plural(preview.count, "video")} you’ve watched, like {sampleTitles.map((t) => `“${t}”`).join(", ")}.</>
+              : "Matches no videos you’ve watched yet."}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="menu-footer">
+        <button type="button" className="btn btn-quiet" onClick={runPreview}>Preview matches</button>
+        <button type="button" className="btn" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn btn-primary" disabled={!draft.categoryId} onClick={() => void onSave(draft)}>
+          Save rule
+        </button>
+      </div>
+
+      {targetPickerOpen ? (
+        <TaxonomyPicker
+          title="Choose the rule’s category"
+          categories={data.categories}
+          subcategories={data.subcategories}
+          current={draft.categoryId || null}
+          canClear={false}
+          reload={reload}
+          onChoose={({ categoryId }) => {
+            if (categoryId) setDraft((current) => ({ ...current, categoryId }))
+            setTargetPickerOpen(false)
+          }}
+          onClose={() => setTargetPickerOpen(false)}
+        />
+      ) : null}
+    </Dialog>
   )
 }

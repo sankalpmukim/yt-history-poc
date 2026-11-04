@@ -56,7 +56,7 @@ test("Live Gentle/Strict/Off overlays on Search and watch page", async ({ ledger
   await expect(strictCard).toHaveAttribute("data-yl-budget", /strict/, { timeout: 60_000 })
   const revealedCard = await strictCard.elementHandle()
   const veil = strictCard.locator(".yl-budget-guard-veil")
-  await expect(veil.locator(".yl-budget-guard-veil-copy > span").first()).toContainText("Hidden ·")
+  await expect(veil.locator(".yl-budget-guard-veil-copy > span").first()).toContainText("Hidden because")
   await expect(veil.locator(".yl-budget-guard-veil-action")).toHaveText("Click to reveal")
   await expect.poll(() => veil.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(13)
   await capture("03-strict-search")

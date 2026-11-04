@@ -1,4 +1,4 @@
-/** Settings: sync (manual w/ lookback), retention, fetch window, toggles, data export/import/wipe. */
+/** Settings: sync, history retention, backup and restore, and advanced options. */
 
 import { useRef, useState } from "react"
 import type { LedgerData } from "../lib/data"
@@ -9,7 +9,7 @@ import { ensureInitialized } from "../../core/ledger"
 import { buildBackup, buildCsv, parseBackupJson, backupToShards, isLedgerKey } from "../../core/exports"
 import { KEYS, eventsKey, isEventsKey } from "../../core/types"
 import { APP_VERSION } from "../../core/version"
-import { BudgetModeControl } from "../lib/ui"
+import { plural, relativeTime } from "../lib/ui"
 import { DEFAULT_SUBCATEGORIES } from "../../core/defaults"
 
 const LOOKBACKS = [7, 14, 30, 60, 90]
@@ -27,12 +27,12 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
 
   const manualSync = async (days: number) => {
     setSyncing(true)
-    setSyncStatus(`requesting ${days}d sync…`)
+    setSyncStatus(`Syncing the last ${days} days…`)
     try {
       const res = await chrome.runtime.sendMessage({ type: "yl.manualSync", daysBack: days })
-      setSyncStatus(String(res?.status ?? "no response from service worker"))
+      setSyncStatus(String(res?.status ?? "YT Ledger didn’t respond. Reload the extension from chrome://extensions and try again."))
     } catch (e: any) {
-      setSyncStatus(`failed: ${e?.message ?? String(e)}`)
+      setSyncStatus(`Sync didn’t start: ${e?.message ?? String(e)}. Reload the extension and try again.`)
     } finally {
       setSyncing(false)
     }
@@ -65,9 +65,9 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
     try {
       const json = await exportJsonText()
       await navigator.clipboard.writeText(json)
-      setImportMsg(`Copied JSON backup to clipboard (${json.length.toLocaleString()} characters).`)
+      setImportMsg("Backup copied to the clipboard.")
     } catch (e: any) {
-      setImportMsg(`clipboard copy failed: ${e?.message ?? String(e)}`)
+      setImportMsg(`Couldn’t copy the backup: ${e?.message ?? String(e)}. Use Export JSON backup instead.`)
     }
   }
 
@@ -87,15 +87,15 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
   }
 
   const importJsonText = async (text: string) => {
-    setImportMsg("reading…")
+    setImportMsg("Reading the backup…")
     try {
       const backup = parseBackupJson(text)
       const shards = backupToShards(backup)
       const confirmation = window.confirm(
-        "Import replaces the current YT Ledger videos, events, categories, subcategories, rules, and settings. Export a backup first if you want to keep them. Continue?"
+        "Importing replaces all your current videos, watches, categories, rules and settings with the ones in this backup. Export a backup first if you want to keep what you have. Import now?"
       )
       if (!confirmation) {
-        setImportMsg("import cancelled")
+        setImportMsg("Import cancelled. Nothing changed.")
         return
       }
       const current = await chrome.storage.local.get(null)
@@ -110,12 +110,12 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
       }
       for (const [month, shard] of Object.entries(shards)) writes[eventsKey(month)] = shard
       await chrome.storage.local.set(writes)
-      setImportMsg(
-        `restored ${Object.keys(backup.data.videos).length} video(s), ${Object.keys(backup.data.events).length} event(s), ${backup.data.rules.length} rule(s)`
-      )
+      const videos = Object.keys(backup.data.videos).length
+      const watches = Object.keys(backup.data.events).length
+      setImportMsg(`Imported ${plural(videos, "video")}, ${plural(watches, "watch", "watches")} and ${plural(backup.data.rules.length, "rule")}.`)
       await reload()
     } catch (e: any) {
-      setImportMsg(`import failed: ${e?.message ?? String(e)}`)
+      setImportMsg(`Import failed: ${e?.message ?? String(e)}. Check that this is a YT Ledger backup file.`)
     }
   }
 
@@ -123,7 +123,7 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
     try {
       await importJsonText(await file.text())
     } catch (e: any) {
-      setImportMsg(`import failed: ${e?.message ?? String(e)}`)
+      setImportMsg(`Import failed: ${e?.message ?? String(e)}. Check that this is a YT Ledger backup file.`)
     }
   }
 
@@ -136,131 +136,91 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
     await reload()
   }
 
+  const lastSync = data.meta?.lastSyncedAt ? new Date(data.meta.lastSyncedAt).toLocaleString() : null
+  const customDays = Number(customLookback)
+  const customValid = customLookback !== "" && customDays >= 1 && customDays <= 90
+
   return (
     <div>
-      <h1>Settings</h1>
-      <p className="hint">Everything is stored locally in your browser profile. Nothing ever leaves this machine.</p>
-
-      <div className="card">
-        <h2>Sync</h2>
-        <div className="muted small" style={{ marginBottom: 10 }}>
-          last sync: {data.meta?.lastSyncedAt ? new Date(data.meta.lastSyncedAt).toLocaleString() : "never"} —{" "}
-          {data.meta?.lastSyncStatus}
-        </div>
-        <div className="row">
-          <button className="btn btn-primary" disabled={syncing} onClick={() => void manualSync(lookback)}>
-            ⟳ Refresh / Sync now
-          </button>
-          <select value={lookback} onChange={(e) => setLookback(Number(e.target.value))} title="lookback for this manual sync">
-            {LOOKBACKS.map((d) => (
-              <option key={d} value={d}>
-                last {d} days
-              </option>
-            ))}
-          </select>
-          <span className="muted small">more options:</span>
-          <input
-            type="number" min={1} max={90} placeholder="custom days" style={{ width: 110 }}
-            value={customLookback}
-            onChange={(e) => setCustomLookback(e.target.value)}
-          />
-          <button
-            className="btn"
-            disabled={!customLookback || Number(customLookback) < 1 || Number(customLookback) > 90}
-            onClick={() => void manualSync(Number(customLookback))}
-          >
-            Sync custom
-          </button>
-        </div>
-        {syncStatus ? <div className="small" style={{ marginTop: 8 }}>{syncStatus}</div> : null}
-        <div className="muted small" style={{ marginTop: 8 }}>
-          Automatic syncs run on every YouTube visit (throttled) with the fetch window below.
-        </div>
+      <div className="page-head">
+        <h1>Settings</h1>
       </div>
+      <p className="lede">Everything YT Ledger knows is stored in this browser profile. Nothing is sent anywhere.</p>
 
-      <div className="card">
-        <h2>Windows &amp; retention</h2>
-        <div className="row" style={{ marginBottom: 8 }}>
-          <label className="small">
-            Automatic fetch window
-            <select
-              value={settings.fetchWindowDays}
-              onChange={(e) => void patchSettings({ fetchWindowDays: Number(e.target.value) })}
-            >
-              {[7, 14, 21, 30].map((d) => (
-                <option key={d} value={d}>last {d} days</option>
-              ))}
+      <section className="card" aria-labelledby="sync-title">
+        <div className="section-head">
+          <div>
+            <h2 id="sync-title">Sync</h2>
+            <p className="section-note">
+              {lastSync ? `Last synced ${relativeTime(data.meta?.lastSyncedAt)} (${lastSync}).` : "Not synced yet."}{" "}
+              YT Ledger also syncs on its own whenever you open YouTube.
+            </p>
+          </div>
+        </div>
+        <div className="setting-group">
+          <label className="field">
+            Sync how far back
+            <select value={lookback} onChange={(e) => setLookback(Number(e.target.value))}>
+              {LOOKBACKS.map((d) => <option key={d} value={d}>Last {d} days</option>)}
             </select>
           </label>
-          <label className="small">
+          <button type="button" className="btn btn-primary" disabled={syncing} onClick={() => void manualSync(lookback)}>
+            {syncing ? "Syncing…" : "Sync now"}
+          </button>
+          <span className="field-row" style={{ gap: 8, marginLeft: 16 }}>
+            <label className="field">
+              Or any number of days, up to 90
+              <input type="number" min={1} max={90} placeholder="custom days" value={customLookback} onChange={(e) => setCustomLookback(e.target.value)} />
+            </label>
+            <button type="button" className="btn" disabled={!customValid || syncing} onClick={() => void manualSync(customDays)}>Sync custom</button>
+          </span>
+        </div>
+        <div className="status" role="status" aria-live="polite">{syncStatus}</div>
+      </section>
+
+      <section className="card" aria-labelledby="history-title">
+        <div className="section-head">
+          <div>
+            <h2 id="history-title">History</h2>
+            <p className="section-note">Watches older than this are deleted when the browser starts. Export a backup first if you want to keep them.</p>
+          </div>
+        </div>
+        <div className="setting-group">
+          <label className="field">
+            Automatic syncs look back
+            <select value={settings.fetchWindowDays} onChange={(e) => void patchSettings({ fetchWindowDays: Number(e.target.value) })}>
+              {[7, 14, 21, 30].map((d) => <option key={d} value={d}>{d} days</option>)}
+            </select>
+          </label>
+          <label className="field">
             Keep history for
             <select
               value={settings.retentionDays == null ? "forever" : String(settings.retentionDays)}
-              onChange={(e) =>
-                void patchSettings({
-                  retentionDays: e.target.value === "forever" ? null : Number(e.target.value)
-                })
-              }
+              onChange={(e) => void patchSettings({ retentionDays: e.target.value === "forever" ? null : Number(e.target.value) })}
             >
               <option value="90">90 days</option>
               <option value="365">1 year</option>
-              <option value="forever">forever</option>
+              <option value="forever">Forever</option>
             </select>
           </label>
         </div>
-        <div className="muted small">
-          Older watch events are pruned on browser startup. Export first if you want a copy.
-        </div>
-      </div>
+        <p className="muted" style={{ margin: "16px 0 0" }}>
+          Budgets and what happens on YouTube are set on the <a href="#/budgets">Budgets</a> page.
+        </p>
+      </section>
 
-      <div className="card">
-        <h2>YouTube integration</h2>
-        <div className="row" style={{ marginBottom: 8, alignItems: "flex-start" }}>
+      <section className="card" aria-labelledby="backup-title">
+        <div className="section-head">
           <div>
-            <div className="small" style={{ marginBottom: 6 }}>Budget enforcement</div>
-            <BudgetModeControl
-              value={settings.budgetMode}
-              onChange={(mode) => void patchSettings({ budgetMode: mode })}
-              compact
-            />
+            <h2 id="backup-title">Export and import</h2>
+            <p className="section-note">Importing a backup replaces everything currently in YT Ledger.</p>
           </div>
-          <span className="small" role="status" aria-live="polite" style={{ alignSelf: "center" }}>
-            Current mode: <b>{settings.budgetMode}</b>
-          </span>
         </div>
-        <div className="muted small">Configure hours/week in the Budgets tab. Off (default) never touches YouTube; Gentle highlights; Strict blurs/hides. Unknown videos are never blocked.</div>
-      </div>
-
-      <div className="card">
-        <h2>Debug</h2>
-        <label className="small" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-          <input type="checkbox" checked={settings.debugOverlay} onChange={(e) => void patchSettings({ debugOverlay: e.target.checked })} />
-          on-YouTube debug overlay
-        </label>
-        {process.env.NODE_ENV !== "production" && (
-          <label className="small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" checked={settings.devRelay} onChange={(e) => void patchSettings({ devRelay: e.target.checked })} />
-            dev relay to local capture server
-          </label>
-        )}
-      </div>
-
-      <div className="card">
-        <h2>Data</h2>
-        <div className="row" style={{ marginBottom: 10 }}>
-          <button className="btn" onClick={() => void exportJson()}>⬇ Export JSON backup</button>
-          <button className="btn" onClick={() => void copyExportJson()}>Copy export JSON to clipboard</button>
-          <button className="btn" onClick={() => void exportCsv()}>⬇ Export CSV ledger</button>
-          <button className="btn" onClick={() => fileRef.current?.click()}>⬆ Import JSON</button>
-          <button
-            className="btn"
-            onClick={() => {
-              void patchSettings({ onboardedAt: null })
-              location.hash = "#/onboarding"
-            }}
-          >
-            ↺ Rerun onboarding
-          </button>
+        <div className="row" style={{ gap: 8 }}>
+          <button type="button" className="btn" onClick={() => void exportJson()}>Export JSON backup</button>
+          <button type="button" className="btn" onClick={() => void copyExportJson()}>Copy backup</button>
+          <button type="button" className="btn" onClick={() => void exportCsv()}>Export CSV ledger</button>
+          <button type="button" className="btn" onClick={() => fileRef.current?.click()}>Import backup file…</button>
           <input
             ref={fileRef} type="file" accept="application/json" style={{ display: "none" }}
             onChange={(e) => {
@@ -270,52 +230,69 @@ export function SettingsView({ data, reload }: { data: LedgerData; reload: () =>
             }}
           />
         </div>
-        <div className="muted small" style={{ marginBottom: 8 }}>
-          Import replaces the current ledger, including existing event shards. Export a backup first.
-          A deterministic QA seed is available at <code>fixtures/qa-seed.json</code>.
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-          <label htmlFor="pasted-backup-json" className="small">Import from pasted JSON</label>
+        <div className="field" style={{ marginTop: 24 }}>
+          <label htmlFor="pasted-backup-json">Import from pasted JSON</label>
           <textarea
             id="pasted-backup-json"
-            aria-label="Import from pasted JSON"
-            rows={8}
+            rows={6}
             value={pastedJson}
             onChange={(e) => setPastedJson(e.target.value)}
-            placeholder="Paste a YT Ledger JSON backup or QA seed here…"
-            style={{ width: "100%", boxSizing: "border-box", fontFamily: "monospace", resize: "vertical" }}
+            placeholder="Paste a YT Ledger backup here"
           />
-          <button
-            className="btn btn-primary"
-            disabled={!pastedJson.trim()}
-            aria-label="Import pasted JSON"
-            onClick={() => void importJsonText(pastedJson)}
-            style={{ alignSelf: "flex-start" }}
-          >
+        </div>
+        <div className="row" style={{ marginTop: 8 }}>
+          <button type="button" className="btn" disabled={!pastedJson.trim()} onClick={() => void importJsonText(pastedJson)}>
             Import pasted JSON
           </button>
         </div>
-        {importMsg ? <div className="small" role="status" aria-live="polite" style={{ marginBottom: 8 }}>{importMsg}</div> : null}
-        <div className="row">
-          {confirmWipe ? (
-            <>
-              <span className="small" style={{ color: "var(--danger)" }}>
-                Delete ALL YT Ledger data (videos, events, rules, categories, settings)?
-              </span>
-              <button className="btn btn-danger" onClick={() => void wipe()}>Yes, wipe everything</button>
-              <button className="btn" onClick={() => setConfirmWipe(false)}>Cancel</button>
-            </>
-          ) : (
-            <button className="btn btn-danger" onClick={() => setConfirmWipe(true)}>
-              Wipe all data
+        <div className="status" role="status" aria-live="polite">{importMsg}</div>
+      </section>
+
+      <section className="card" aria-labelledby="advanced-title">
+        <div className="section-head">
+          <h2 id="advanced-title">Advanced</h2>
+        </div>
+        <div style={{ display: "grid", gap: 12 }}>
+          <label className="check">
+            <input type="checkbox" checked={settings.debugOverlay} onChange={(e) => void patchSettings({ debugOverlay: e.target.checked })} />
+            Show a debug overlay on YouTube
+          </label>
+          {process.env.NODE_ENV !== "production" && (
+            <label className="check">
+              <input type="checkbox" checked={settings.devRelay} onChange={(e) => void patchSettings({ devRelay: e.target.checked })} />
+              Send sync data to the local capture server (development only)
+            </label>
+          )}
+          <div>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                void patchSettings({ onboardedAt: null })
+                location.hash = "#/onboarding"
+              }}
+            >
+              Run setup again
             </button>
+          </div>
+        </div>
+
+        <div className="danger-zone" style={{ marginTop: 32 }}>
+          {confirmWipe ? (
+            <div className="confirm">
+              <span className="confirm-text">Delete every video, watch, rule, category and setting? This can’t be undone.</span>
+              <button type="button" className="btn btn-danger" onClick={() => void wipe()}>Delete everything</button>
+              <button type="button" className="btn btn-quiet" autoFocus onClick={() => setConfirmWipe(false)}>Cancel</button>
+            </div>
+          ) : (
+            <button type="button" className="btn btn-quiet text-danger" onClick={() => setConfirmWipe(true)}>Delete all data…</button>
           )}
         </div>
-      </div>
+      </section>
 
-      <div className="muted small">
-        YT Ledger v{APP_VERSION} · {Object.keys(data.videos).length} videos · {data.events.length} events stored
-      </div>
+      <p className="app-footer">
+        YT Ledger {APP_VERSION}. {plural(Object.keys(data.videos).length, "video")} and {plural(data.events.length, "watch", "watches")} stored.
+      </p>
     </div>
   )
 }

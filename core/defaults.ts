@@ -7,14 +7,14 @@
 import type { Category, MetaState, Rule, Settings, Subcategory } from "./types"
 
 export const DEFAULT_CATEGORIES: Category[] = [
-  { id: "deep",        name: "Courses & lectures",       emoji: "🎓", color: "#8b5cf6", valueScore: 5, order: 0 },
-  { id: "practical",   name: "Practical how-tos",        emoji: "🛠️", color: "#3b82f6", valueScore: 4, order: 1 },
-  { id: "informative", name: "Informative talk",         emoji: "🧠", color: "#14b8a6", valueScore: 4, order: 2 },
-  { id: "news",        name: "News & updates",           emoji: "📰", color: "#22c55e", valueScore: 3, order: 3 },
-  { id: "talk-fun",    name: "Recreational talk",        emoji: "🎙️", color: "#84cc16", valueScore: 2, order: 4 },
-  { id: "fun",         name: "Intentional entertainment",emoji: "🎬", color: "#eab308", valueScore: 1, order: 5 },
-  { id: "junk-fun",    name: "Mindless entertainment",   emoji: "🍿", color: "#f97316", valueScore: 1, order: 6 },
-  { id: "brain-rot",   name: "Brain rot",                emoji: "🧟", color: "#e11d48", valueScore: 0, order: 7 }
+  { id: "deep",        name: "Courses & lectures",       emoji: "🎓", color: "#5671c2", valueScore: 5, order: 0 },
+  { id: "practical",   name: "Practical how-tos",        emoji: "🛠️", color: "#3e7f96", valueScore: 4, order: 1 },
+  { id: "informative", name: "Informative talk",         emoji: "🧠", color: "#4b8b6b", valueScore: 4, order: 2 },
+  { id: "news",        name: "News & updates",           emoji: "📰", color: "#7f8c3a", valueScore: 3, order: 3 },
+  { id: "talk-fun",    name: "Recreational talk",        emoji: "🎙️", color: "#b4892c", valueScore: 2, order: 4 },
+  { id: "fun",         name: "Intentional entertainment",emoji: "🎬", color: "#c46f32", valueScore: 1, order: 5 },
+  { id: "junk-fun",    name: "Mindless entertainment",   emoji: "🍿", color: "#b8503f", valueScore: 1, order: 6 },
+  { id: "brain-rot",   name: "Brain rot",                emoji: "🧟", color: "#a63d5c", valueScore: 0, order: 7 }
 ]
 
 /**

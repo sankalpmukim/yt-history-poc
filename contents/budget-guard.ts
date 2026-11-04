@@ -3,9 +3,9 @@
  *
  * Modes (settings.budgetMode):
  *  - off    — no DOM changes
- *  - gentle — red border + chip on over-budget videos; banner on watch pages
- *  - strict — blur/hide over-budget thumbnails & titles with a reveal-once
- *             placeholder; dismissible interstitial on watch pages
+ *  - gentle — outline + "over budget" label on over-budget videos; a note on watch pages
+ *  - strict — cover over-budget thumbnails & titles with a click-to-reveal
+ *             slip; an interstitial on watch pages ("Go back" / "Watch anyway")
  *
  * Fail-open: unknown videos, missing snapshot, thrown errors → page as-is.
  * All injected UI uses class `yl-budget-guard` so it can be stripped in one go.
@@ -243,53 +243,64 @@ function ensureStyle(): void {
   if (document.getElementById(STYLE_ID)) return
   const s = document.createElement("style")
   s.id = STYLE_ID
+  const R = ROOT_CLASS
+  // Ledger-slip materials on top of YouTube. YouTube's own theme setting (html[dark])
+  // decides light or dark, not the OS. Red ink is kept out of the chrome so it
+  // never competes with YouTube's brand red.
   s.textContent = `
-@font-face {
-  font-family: "YT Ledger Display";
-  src: url("${chrome.runtime.getURL("assets/fonts/BarlowCondensed-SemiBold.woff2")}") format("woff2");
-  font-style: normal; font-weight: 600; font-display: swap;
+@font-face { font-family: "YT Ledger Sans"; src: url("${chrome.runtime.getURL("assets/fonts/PublicSans-Variable.woff2")}") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "YT Ledger Serif"; src: url("${chrome.runtime.getURL("assets/fonts/SourceSerif4-Variable.woff2")}") format("woff2"); font-weight: 200 900; font-display: swap; }
+.${R}-chip, .${R}-veil, .${R}-banner, .${R}-interstitial {
+  --yl-paper: #eef1e2; --yl-ink: #1e2b45; --yl-pencil: #4f574a; --yl-rule: #c9d4b4; --yl-red: #b42318; --yl-on-ink: #f7f9ef;
+  font-family: "YT Ledger Sans", Roboto, Arial, sans-serif; color: var(--yl-ink); -webkit-font-smoothing: antialiased;
 }
-.${ROOT_CLASS}-chip {
-  position: absolute; z-index: 4; left: 6px; top: 6px;
-  background: #18323a; color: #fff; border: 1px solid #c58a3a;
-  font: 600 clamp(12px, 1.3vw, 16px)/1.25 "YT Ledger Display", "Avenir Next", Avenir, Arial, sans-serif;
-  padding: 5px 9px; border-radius: 3px; pointer-events: none;
-  box-shadow: 0 2px 8px rgba(0,0,0,.55);
+html[dark] .${R}-chip, html[dark] .${R}-veil, html[dark] .${R}-banner, html[dark] .${R}-interstitial {
+  --yl-paper: #1c2a23; --yl-ink: #e6ebda; --yl-pencil: #a3ad98; --yl-rule: #33463a; --yl-red: #f2937f; --yl-on-ink: #1c2a23;
 }
-.${ROOT_CLASS}-gentle { outline: 2px solid #c58a3a; outline-offset: -2px; border-radius: 4px; }
-.${ROOT_CLASS}-strict-blur { filter: blur(14px); user-select: none; }
-.${ROOT_CLASS}-veil {
-  position: absolute; inset: 0; z-index: 3; display: flex; align-items: center;
-  justify-content: center; text-align: center; padding: 10px;
-  background: rgba(17,39,44,.94); color: #f5faf7; border: 1px solid #86aaa2;
-  font: 600 clamp(13px, 1.6vw, 18px)/1.35 "YT Ledger Display", "Avenir Next", Avenir, Arial, sans-serif;
-  cursor: pointer; border-radius: 4px; text-shadow: 0 1px 2px #000;
+.${R}-chip {
+  position: absolute; z-index: 4; left: 8px; top: 8px; pointer-events: none;
+  padding: 4px 8px; border-radius: 4px; background: var(--yl-paper); border: 1px solid var(--yl-ink);
+  font-size: clamp(12px, 1.2vw, 14px); font-weight: 600; line-height: 1.3;
 }
-.${ROOT_CLASS}-veil-copy { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.${ROOT_CLASS}-veil-action { font-size: .78em; font-weight: 600; opacity: .9; }
-@media (prefers-color-scheme: light) {
-  .${ROOT_CLASS}-chip { background: #f5faf7; color: #10272c; border-color: #765017; text-shadow: none; }
-  .${ROOT_CLASS}-veil { background: rgba(245,250,247,.96); color: #10272c; border-color: #315c61; text-shadow: none; }
+.${R}-gentle { outline: 2px solid #1e2b45; outline-offset: 2px; border-radius: 12px; }
+html[dark] .${R}-gentle { outline-color: #e6ebda; }
+.${R}-strict-blur { filter: blur(16px); user-select: none; }
+.${R}-veil {
+  all: unset; box-sizing: border-box; position: absolute; inset: 0; z-index: 3;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px;
+  padding: 12px 16px; border-radius: 12px; background: var(--yl-paper);
+  border: 1px solid var(--yl-rule); cursor: pointer; text-align: left;
+  font-family: "YT Ledger Sans", Roboto, Arial, sans-serif; color: var(--yl-ink);
+  font-size: clamp(13px, 1.4vw, 16px); font-weight: 600; line-height: 1.35;
 }
-.${ROOT_CLASS}-banner, .${ROOT_CLASS}-interstitial {
+.${R}-veil:focus-visible { outline: 3px solid #2b4c9b; outline-offset: -3px; }
+html[dark] .${R}-veil:focus-visible { outline-color: #9db3f0; }
+.${R}-veil-copy { display: flex; flex-direction: column; gap: 4px; }
+.${R}-veil-action { font-size: 13px; font-weight: 500; color: var(--yl-pencil); }
+.${R}-veil:hover .${R}-veil-action { text-decoration: underline; text-underline-offset: 3px; }
+.${R}-banner, .${R}-interstitial {
   position: fixed; z-index: 2147483646; left: 50%; transform: translateX(-50%);
-  background: #18323a; color: #f4f8f5; border: 1px solid #c58a3a;
-  border-radius: 5px; padding: 14px 17px; font: 13px/1.55 "YT Ledger Display", "Avenir Next", Avenir, Arial, sans-serif;
-  box-shadow: 0 8px 28px rgba(0,0,0,.58); max-width: 480px;
+  background: var(--yl-paper); border: 1px solid var(--yl-rule); border-left: 3px double var(--yl-red);
+  border-radius: 4px; box-shadow: 0 15px 35px rgba(0, 0, 0, .35);
+  font-size: 14px; line-height: 1.5;
 }
-.${ROOT_CLASS}-banner { top: 64px; }
-.${ROOT_CLASS}-interstitial {
-  top: 30%; width: min(440px, 90vw);
+.${R}-banner { top: 72px; display: flex; align-items: center; gap: 16px; padding: 12px 12px 12px 16px; max-width: min(560px, calc(100vw - 32px)); }
+.${R}-interstitial { top: 25%; width: min(440px, calc(100vw - 32px)); padding: 24px; }
+.${R}-title { margin: 0 0 8px; font: 600 24px/1.2 "YT Ledger Serif", Georgia, serif; }
+.${R}-text { margin: 0; }
+.${R}-figure { font-family: "YT Ledger Serif", Georgia, serif; font-weight: 600; }
+.${R}-actions { display: flex; gap: 8px; margin-top: 24px; flex-wrap: wrap; }
+.${R}-banner button, .${R}-interstitial button {
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: center; min-height: 32px; padding: 6px 12px;
+  border-radius: 4px; border: 1px solid var(--yl-ink); background: transparent; color: var(--yl-ink);
+  font: 500 14px/1.2 "YT Ledger Sans", Roboto, Arial, sans-serif; cursor: pointer; white-space: nowrap;
 }
-.${ROOT_CLASS}-interstitial button, .${ROOT_CLASS}-banner button {
-  margin-top: 8px; margin-right: 8px; background: #284a52; color: #fff;
-  border: 1px solid #86aaa2; border-radius: 4px; padding: 7px 12px; cursor: pointer;
-}
-.${ROOT_CLASS}-interstitial button:hover, .${ROOT_CLASS}-banner button:hover { background: #37616a; }
-.${ROOT_CLASS}-interstitial button:focus-visible, .${ROOT_CLASS}-banner button:focus-visible {
-  outline: 3px solid #f0c979; outline-offset: 2px;
-}
-.${ROOT_CLASS}-thumbwrap { position: relative; }
+.${R}-banner button { margin-left: auto; }
+.${R}-banner button:hover, .${R}-interstitial button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.${R}-interstitial .${R}-primary { background: var(--yl-ink); color: var(--yl-on-ink); font-weight: 600; }
+.${R}-banner button:focus-visible, .${R}-interstitial button:focus-visible { outline: 3px solid #2b4c9b; outline-offset: 2px; }
+html[dark] .${R}-banner button:focus-visible, html[dark] .${R}-interstitial button:focus-visible { outline-color: #9db3f0; }
+.${R}-thumbwrap { position: relative; }
 `
   ;(document.head || document.documentElement).appendChild(s)
 }
@@ -297,6 +308,7 @@ function ensureStyle(): void {
 function stripAll(): void {
   for (const n of document.querySelectorAll("." + ROOT_CLASS)) n.remove()
   for (const n of document.querySelectorAll("[data-yl-budget]")) {
+    setLinksFocusable(n, true)
     n.removeAttribute("data-yl-budget")
     n.classList.remove(ROOT_CLASS + "-gentle")
   }
@@ -318,7 +330,24 @@ function thumbnailHost(card: Element): HTMLElement | null {
   )
 }
 
+/** Covered links leave the tab order while a veil hides them, and come back after. */
+function setLinksFocusable(card: Element, focusable: boolean): void {
+  for (const link of card.querySelectorAll<HTMLElement>("a[href]")) {
+    if (focusable) {
+      if (!link.hasAttribute("data-yl-tabindex")) continue
+      const original = link.getAttribute("data-yl-tabindex")
+      if (original) link.setAttribute("tabindex", original)
+      else link.removeAttribute("tabindex")
+      link.removeAttribute("data-yl-tabindex")
+    } else if (!link.hasAttribute("data-yl-tabindex")) {
+      link.setAttribute("data-yl-tabindex", link.getAttribute("tabindex") ?? "")
+      link.setAttribute("tabindex", "-1")
+    }
+  }
+}
+
 function unapplyCard(card: Element): void {
+  setLinksFocusable(card, true)
   card.removeAttribute("data-yl-budget")
   card.classList.remove(ROOT_CLASS + "-gentle")
   for (const n of card.querySelectorAll("." + ROOT_CLASS)) n.remove()
@@ -330,7 +359,7 @@ function unapplyCard(card: Element): void {
 function applyGentle(card: Element, categoryId: string): void {
   card.classList.add(ROOT_CLASS + "-gentle")
   const host = thumbnailHost(card)
-  const label = chip(`over budget · ${catName(categoryId)}`)
+  const label = chip(`${catName(categoryId)} over budget`)
   if (host) {
     const wrap = host as HTMLElement
     if (getComputedStyle(wrap).position === "static") wrap.style.position = "relative"
@@ -364,12 +393,13 @@ function applyStrict(card: Element, videoId: string, categoryId: string): void {
       )
   for (const target of targets) target.classList.add(`${ROOT_CLASS}-strict-blur`)
 
-  const veil = document.createElement("div")
+  const veil = document.createElement("button")
+  veil.type = "button"
   veil.className = `${ROOT_CLASS} ${ROOT_CLASS}-veil`
   const copy = document.createElement("span")
   copy.className = `${ROOT_CLASS}-veil-copy`
   const categoryLine = document.createElement("span")
-  categoryLine.textContent = `Hidden · ${catName(categoryId)} over budget`
+  categoryLine.textContent = `Hidden because ${catName(categoryId)} is over budget`
   const actionLine = document.createElement("span")
   actionLine.className = `${ROOT_CLASS}-veil-action`
   actionLine.textContent = "Click to reveal"
@@ -381,6 +411,8 @@ function applyStrict(card: Element, videoId: string, categoryId: string): void {
     state.revealed.add(videoId)
     unapplyCard(card)
   })
+  veil.addEventListener("keydown", (e) => e.stopPropagation())
+  setLinksFocusable(card, false)
   veilHost.appendChild(veil)
   if (title) title.classList.add(ROOT_CLASS + "-strict-blur")
 }
@@ -418,6 +450,27 @@ function removeWatchUi(): void {
   document.getElementById("yl-budget-watch-ui")?.remove()
 }
 
+function overText(categoryId: string): HTMLElement {
+  const p = document.createElement("p")
+  p.className = `${ROOT_CLASS}-text`
+  const figure = document.createElement("span")
+  figure.className = `${ROOT_CLASS}-figure`
+  figure.textContent = `${overageMinutes(categoryId)} min`
+  const name = document.createElement("b")
+  name.textContent = catName(categoryId)
+  p.append("You’re ", figure, " over budget in ", name, " this week.")
+  return p
+}
+
+function watchButton(label: string, onClick: () => void, primary = false): HTMLButtonElement {
+  const btn = document.createElement("button")
+  btn.type = "button"
+  btn.textContent = label
+  if (primary) btn.className = `${ROOT_CLASS}-primary`
+  btn.addEventListener("click", onClick)
+  return btn
+}
+
 function showWatchUi(videoId: string, categoryId: string): void {
   if (document.hidden) return
   if (state.watchDismissed.has(videoId)) return
@@ -425,29 +478,44 @@ function showWatchUi(videoId: string, categoryId: string): void {
   const wrap = document.createElement("div")
   wrap.id = "yl-budget-watch-ui"
   wrap.className = ROOT_CLASS
-  const n = overageMinutes(categoryId)
+  // Keep YouTube's single-key shortcuts from firing while focus is in our UI.
+  wrap.addEventListener("keydown", (e) => {
+    e.stopPropagation()
+    if (e.key === "Escape") dismiss()
+  })
+  const dismiss = () => {
+    state.watchDismissed.add(videoId)
+    wrap.remove()
+  }
   if (state.mode === "gentle") {
     wrap.classList.add(ROOT_CLASS + "-banner")
-    wrap.innerHTML = `<div>You're ${n} min over budget in <b>${catName(categoryId)}</b> this week.</div>`
-    const btn = document.createElement("button")
-    btn.textContent = "Dismiss"
-    btn.onclick = () => {
-      state.watchDismissed.add(videoId)
-      wrap.remove()
-    }
-    wrap.appendChild(btn)
-  } else {
-    wrap.classList.add(ROOT_CLASS + "-interstitial")
-    wrap.innerHTML = `<div><b>Over budget</b><p>You're ${n} min over budget in <b>${catName(categoryId)}</b> this week.</p></div>`
-    const btn = document.createElement("button")
-    btn.textContent = "Watch anyway"
-    btn.onclick = () => {
-      state.watchDismissed.add(videoId)
-      wrap.remove()
-    }
-    wrap.appendChild(btn)
+    wrap.setAttribute("role", "status")
+    // Mount the live region first, then fill it, so screen readers announce it.
+    document.documentElement.appendChild(wrap)
+    setTimeout(() => wrap.append(overText(categoryId), watchButton("Dismiss", dismiss)), 50)
+    return
   }
+  wrap.classList.add(ROOT_CLASS + "-interstitial")
+  wrap.setAttribute("role", "alertdialog")
+  wrap.setAttribute("aria-modal", "true")
+  wrap.setAttribute("aria-labelledby", "yl-budget-watch-title")
+  wrap.setAttribute("aria-describedby", "yl-budget-watch-text")
+  const title = document.createElement("h2")
+  title.id = "yl-budget-watch-title"
+  title.className = `${ROOT_CLASS}-title`
+  title.textContent = "Over budget"
+  const text = overText(categoryId)
+  text.id = "yl-budget-watch-text"
+  const actions = document.createElement("div")
+  actions.className = `${ROOT_CLASS}-actions`
+  const back = watchButton("Go back", () => {
+    if (history.length > 1) history.back()
+    else location.assign("https://www.youtube.com/")
+  }, true)
+  actions.append(back, watchButton("Watch anyway", dismiss))
+  wrap.append(title, text, actions)
   document.documentElement.appendChild(wrap)
+  back.focus()
 }
 
 function scanWatch(): void {

@@ -1,10 +1,11 @@
-/** Ledger: the transactions view — watch events by day, inline categorize, bulk assign. */
+/** Ledger: every watch, grouped by day, with inline and bulk categorization. */
 
 import { useMemo, useState } from "react"
 import type { LedgerData } from "../lib/data"
 import { aggregateRange, type LedgerRow } from "../../core/aggregate"
 import { setVideoCategory, bulkAssign, ensureChannelRule } from "../../core/assign"
 import { ChromeKV } from "../../core/storage"
+import type { Category, Subcategory } from "../../core/types"
 import {
   CategoryChip,
   TaxonomyPicker,
@@ -12,34 +13,36 @@ import {
   RANGE_OPTIONS,
   fmtDur,
   fmtDate,
+  plural,
   rangeFromDate
 } from "../lib/ui"
+
+const sumSeconds = (rows: LedgerRow[]) => rows.reduce((a, r) => a + (r.estimatedSeconds ?? 0), 0)
 
 export function LedgerView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const [range, setRange] = useState<string>("30d")
   const [query, setQuery] = useState("")
   const [catFilter, setCatFilter] = useState<string>("all")
-  const [onlyUncategorized, setOnlyUncategorized] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pickerFor, setPickerFor] = useState<string | null>(null)
   const [bulkPicker, setBulkPicker] = useState(false)
-  const [bulkTarget, setBulkTarget] = useState<string | null>(null)
-  const catById = useMemo(
-    () => new Map(data.categories.map((c) => [c.id, c] as const)),
-    [data.categories]
+  const catById = useMemo(() => new Map(data.categories.map((c) => [c.id, c] as const)), [data.categories])
+
+  const allRows = useMemo(
+    () =>
+      aggregateRange({
+        videos: data.videos,
+        events: data.events,
+        categories: data.categories,
+        subcategories: data.subcategories,
+        from: rangeFromDate(range)
+      }).rows,
+    [data, range]
   )
 
   const rows = useMemo(() => {
-    const agg = aggregateRange({
-      videos: data.videos,
-      events: data.events,
-      categories: data.categories,
-      subcategories: data.subcategories,
-      from: rangeFromDate(range)
-    })
     const q = query.trim().toLowerCase()
-    return agg.rows.filter((r) => {
-      if (onlyUncategorized && r.categoryId != null) return false
+    return allRows.filter((r) => {
       if (
         catFilter !== "all" &&
         (catFilter === "none"
@@ -55,7 +58,7 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
       }
       return true
     })
-  }, [data, range, query, catFilter, onlyUncategorized])
+  }, [allRows, query, catFilter, catById])
 
   const byDay = useMemo(() => {
     const m = new Map<string, LedgerRow[]>()
@@ -67,6 +70,7 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
     return [...m.entries()]
   }, [rows])
 
+  const filtered = query.trim() !== "" || catFilter !== "all"
   const pickerVideo = pickerFor ? data.videos[pickerFor] : null
   const toggle = (id: string) => {
     const next = new Set(selected)
@@ -77,29 +81,29 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
 
   return (
     <div>
-      <div className="spread" style={{ marginBottom: 12 }}>
+      <div className="page-head">
         <h1>Ledger</h1>
-        <RangeBar value={range} onChange={setRange} options={RANGE_OPTIONS as unknown as Array<{ id: string; label: string }>} />
+        <RangeBar value={range} onChange={setRange} options={RANGE_OPTIONS} />
       </div>
-      <p className="hint">
-        Watch events grouped by day (YouTube history is day-granular — rows sort by sync recency
-        within a day). Estimated time = duration × progress × repeats.
+      <p className="lede">
+        Every video you watched, by day. YouTube records only the day, so times are estimates:
+        length × how much you watched × replays. A ≈ means we assumed you watched to the end.
       </p>
 
-      <div className="card" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="card filters">
         <input
           type="text"
+          aria-label="Search title or channel"
           placeholder="Search title or channel…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          style={{ minWidth: 220 }}
         />
-        <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
+        <select aria-label="Filter by category" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
           <option value="all">All categories</option>
           <option value="none">Uncategorized</option>
           {data.categories.filter((c) => !c.archivedAt).map((c) => (
             <optgroup key={c.id} label={`${c.emoji} ${c.name}`}>
-              <option value={c.id}>{c.name} (all)</option>
+              <option value={c.id}>{c.name}, everything</option>
               {data.subcategories
                 .filter((s) => s.parentId === c.id && !s.archivedAt)
                 .sort((a, b) => a.order - b.order)
@@ -107,39 +111,17 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
             </optgroup>
           ))}
         </select>
-        <label className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <input
-            type="checkbox"
-            checked={onlyUncategorized}
-            onChange={(e) => setOnlyUncategorized(e.target.checked)}
-          />
-          only uncategorized
-        </label>
-        <span className="muted small" style={{ marginLeft: "auto" }}>
-          {rows.length} event(s) · {fmtDur(rows.reduce((a, r) => a + (r.estimatedSeconds ?? 0), 0))}
+        <span className="filters-summary" role="status">
+          <strong>{fmtDur(sumSeconds(rows))}</strong> in {plural(rows.length, "watch", "watches")}
         </span>
       </div>
 
       {selected.size > 0 ? (
-        <div className="bulkbar">
-          <b>{selected.size}</b> selected
-          <button className="btn btn-sm" onClick={() => setBulkPicker(true)}>
-            {bulkTarget ? `Chosen: ${data.categories.find((c) => c.id === bulkTarget)?.name ?? data.subcategories.find((s) => s.id === bulkTarget)?.name}` : "Choose category…"}
-          </button>
+        <div className="bulkbar" role="region" aria-label="Selected videos">
+          <span className="bulkbar-count">{plural(selected.size, "video")} selected</span>
+          <button type="button" className="btn btn-sm" onClick={() => setBulkPicker(true)}>Choose category…</button>
           <button
-            className="btn btn-primary btn-sm"
-            onClick={async () => {
-              if (!bulkTarget) return
-              await bulkAssign(new ChromeKV(), [...selected], bulkTarget, new Date())
-              setSelected(new Set())
-              setBulkTarget(null)
-              await reload()
-            }}
-            disabled={!bulkTarget}
-          >
-            Assign
-          </button>
-          <button
+            type="button"
             className="btn btn-sm"
             onClick={async () => {
               await bulkAssign(new ChromeKV(), [...selected], null, new Date())
@@ -147,38 +129,34 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
               await reload()
             }}
           >
-            Clear overrides
+            Reset to automatic
           </button>
-          <button className="btn btn-sm" onClick={() => setSelected(new Set())}>
-            Deselect
-          </button>
+          <button type="button" className="btn btn-sm btn-quiet" onClick={() => setSelected(new Set())}>Clear selection</button>
         </div>
       ) : null}
 
       {byDay.length === 0 ? (
-        <div className="card empty">No events match. Sync some history first, or loosen the filters.</div>
+        filtered ? (
+          <div className="empty">
+            <p style={{ margin: "0 0 12px" }}>No watches match these filters.</p>
+            <button type="button" className="btn" onClick={() => { setQuery(""); setCatFilter("all") }}>Clear filters</button>
+          </div>
+        ) : (
+          <p className="empty">No watches in this range yet. Open YouTube while signed in, or pick a longer range.</p>
+        )
       ) : (
-        byDay.map(([day, dayRows]) => (
-          <div key={day} className="card">
-            <div className="dayhead">
-              {fmtDate(day)}
-              <span className="muted">
-                {dayRows.length} event(s) ·{" "}
-                {fmtDur(dayRows.reduce((a, r) => a + (r.estimatedSeconds ?? 0), 0))}
-              </span>
-            </div>
+        byDay.map(([day, dayRows], dayIndex) => (
+          <section key={day} className="day" aria-labelledby={`day-${day}`}>
+            <h2 className="dayhead" id={`day-${day}`}>{fmtDate(day)}</h2>
             <div className="tablewrap">
               <table className="ledger">
-                <thead>
+                <thead className={dayIndex === 0 ? undefined : "sr-only"}>
                   <tr>
-                    <th style={{ width: 24 }}></th>
-                    <th>Category</th>
-                    <th>Title</th>
-                    <th>Channel</th>
-                    <th style={{ width: 70 }}>Duration</th>
-                    <th style={{ width: 70 }}>Est. watched</th>
-                    <th style={{ width: 34 }}></th>
-                    <th style={{ width: 20 }}></th>
+                    <th className="col-check"><span className="sr-only">Select</span></th>
+                    <th className="col-cat">Category</th>
+                    <th>Video</th>
+                    <th className="col-len">Length</th>
+                    <th className="money">Time</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -194,20 +172,22 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
                     />
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={4} className="total-label">{plural(dayRows.length, "watch", "watches")}</td>
+                    <td className="money"><span className="amount total-rule" style={{ display: "inline-block", padding: "2px 0" }}>{fmtDur(sumSeconds(dayRows))}</span></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
-          </div>
+          </section>
         ))
       )}
 
       {pickerVideo ? (
         <TaxonomyPicker
-          title="Categorize video"
-          contextLine={
-            <span>
-              {pickerVideo.title} — <b>{pickerVideo.channel || "unknown channel"}</b>
-            </span>
-          }
+          title="Choose a category"
+          contextLine={<>{pickerVideo.title}<br />{pickerVideo.channel || "Unknown channel"}</>}
           categories={data.categories}
           subcategories={data.subcategories}
           current={pickerVideo.categoryOverride ?? pickerVideo.autoCategoryId}
@@ -228,13 +208,13 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
       ) : null}
       {bulkPicker ? (
         <TaxonomyPicker
-          title={`Categorize ${selected.size} selected videos`}
+          title={`Choose a category for ${plural(selected.size, "video")}`}
           categories={data.categories}
           subcategories={data.subcategories}
-          current={bulkTarget}
+          current={null}
+          canClear={false}
           onChoose={async ({ categoryId }) => {
             if (categoryId) await bulkAssign(new ChromeKV(), [...selected], categoryId, new Date())
-            setBulkTarget(null)
             setBulkPicker(false)
             setSelected(new Set())
             await reload()
@@ -256,41 +236,38 @@ function LedgerRowView({
   onPickCategory
 }: {
   row: LedgerRow
-  categories: import("../../core/types").Category[]
-  subcategories: import("../../core/types").Subcategory[]
+  categories: Category[]
+  subcategories: Subcategory[]
   checked: boolean
   onToggle: () => void
   onPickCategory: () => void
 }) {
   const v = row.video
+  const title = v.title || v.videoId
+  const repeats = row.event.occurrences > 1 ? `watched ${row.event.occurrences} times` : null
   return (
     <tr>
-      <td>
-        <input type="checkbox" checked={checked} onChange={onToggle} />
+      <td className="col-check">
+        <input type="checkbox" aria-label={`Select ${title}`} checked={checked} onChange={onToggle} />
       </td>
-      <td>
-        <CategoryChip
-          targetId={row.targetId}
-          categories={categories}
-          subcategories={subcategories}
-          onClick={onPickCategory}
-        />
+      <td className="col-cat">
+        <CategoryChip targetId={row.targetId} categories={categories} subcategories={subcategories} onClick={onPickCategory} />
       </td>
-      <td style={{ maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        <a href={v.url} target="_blank" rel="noreferrer" title={v.title}>
-          {v.title || v.videoId}
-        </a>
+      <td className="title-cell">
+        <a href={v.url} target="_blank" rel="noreferrer" title={title}>{title}</a>
+        <div className="item-sub">{[v.channel, repeats].filter(Boolean).join(", ")}</div>
       </td>
-      <td className="muted" style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {v.channel}
-      </td>
-      <td className="muted">{fmtDur(v.durationSec)}</td>
-      <td>{fmtDur(row.estimatedSeconds)}</td>
-      <td className="muted" title={`estimate confidence: ${row.confidence}`}>
-        <span className={"dot " + row.confidence}></span>
-      </td>
-      <td className="muted small" title={`${row.event.occurrences} occurrence(s) this day`}>
-        {row.event.occurrences > 1 ? `×${row.event.occurrences}` : ""}
+      <td className="col-len">{fmtDur(v.durationSec)}</td>
+      <td className="money amount">
+        {row.confidence === "low" ? (
+          <span title="Length unknown, so this can't be estimated yet">—<span className="sr-only">length unknown</span></span>
+        ) : (
+          <>
+            {row.confidence === "medium" ? <span className="est" title="Assumed watched to the end" aria-hidden="true">≈</span> : null}
+            {fmtDur(row.estimatedSeconds)}
+            {row.confidence === "medium" ? <span className="sr-only">, assumed watched to the end</span> : null}
+          </>
+        )}
       </td>
     </tr>
   )

@@ -1,22 +1,24 @@
-/** Budgets: weekly per-category time budgets, spent-vs-budget, enforcement mode. */
+/** Budgets: weekly hours per category, spent so far, and what happens on YouTube when one runs over. */
 
 import { useMemo, useState } from "react"
 import type { LedgerData } from "../lib/data"
 import { patchSettings, settingsOf } from "../lib/data"
 import { refreshBudgetStatusClient } from "../lib/budgetclient"
 import { computeBudgetStatus } from "../../core/budget"
-import { fmtDur, fmtDate, BudgetModeControl } from "../lib/ui"
+import { fmtDur, fmtDate, BudgetModeControl, budgetModeDetail } from "../lib/ui"
 
 export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const settings = settingsOf(data)
-  const [draft, setDraft] = useState<Record<string, string>>(() => {
+  // Show hours rounded for reading; an untouched field keeps its exact stored value on save.
+  const [initial] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     for (const c of data.categories) {
       const sec = settings.budgetsWeekly[c.id] ?? 0
-      init[c.id] = sec > 0 ? String(sec / 3600) : ""
+      init[c.id] = sec > 0 ? String(Number((sec / 3600).toFixed(2))) : ""
     }
     return init
   })
+  const [draft, setDraft] = useState<Record<string, string>>(initial)
   const [saved, setSaved] = useState(false)
 
   const status = useMemo(() => {
@@ -44,6 +46,8 @@ export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => 
   const save = async () => {
     const budgetsWeekly: Record<string, number> = {}
     for (const [catId, hoursStr] of Object.entries(draft)) {
+      const stored = settings.budgetsWeekly[catId] ?? 0
+      if (hoursStr === initial[catId] && stored > 0) { budgetsWeekly[catId] = stored; continue }
       const hours = parseFloat(hoursStr)
       if (Number.isFinite(hours) && hours > 0) budgetsWeekly[catId] = Math.round(hours * 3600)
     }
@@ -51,92 +55,80 @@ export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => 
     await refreshBudgetStatusClient()
     await reload()
     setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
+    setTimeout(() => setSaved(false), 2500)
   }
 
   return (
     <div>
-      <h1>Budgets</h1>
-      <p className="hint">
-        Weekly seconds-per-category budgets; the week runs Monday 00:00 local
-        {status ? ` (current week: ${fmtDate(status.weekStart)}, ${daysLeft} day(s) left)` : ""}.
-        Spent = estimated watch time this week. Nothing is enforced until you pick a mode below.
+      <div className="page-head">
+        <h1>Budgets</h1>
+      </div>
+      <p className="lede">
+        Set weekly hours for any category; time in its subcategories counts toward it. Weeks start
+        on Monday{status ? `, and this one has ${daysLeft === 1 ? "1 day" : `${daysLeft} days`} left` : ""}.
       </p>
 
-      <div className="card">
-        <h2>Enforcement on YouTube</h2>
-        <div className="row" style={{ marginBottom: 8, alignItems: "flex-start" }}>
-          <BudgetModeControl
-            value={settings.budgetMode}
-            onChange={(mode) => void patchSettings({ budgetMode: mode })}
-          />
-          <span className="small" role="status" aria-live="polite" style={{ alignSelf: "center" }}>
-            Current mode: <b>{settings.budgetMode}</b>
-          </span>
+      <section className="card" aria-labelledby="weekly-title">
+        <div className="section-head">
+          <h2 id="weekly-title">This week</h2>
+          {status ? <span className="muted">From {fmtDate(status.weekStart)}</span> : null}
         </div>
-        <div className="muted small">
-          Gentle adds a red border + “over budget” chip on over-budget videos in feeds; Strict
-          blurs thumbnails/titles with a reveal-on-click, and shows a dismissible interstitial on
-          watch pages. Unknown videos are never touched (fail-open).
+        <div className="queueitem budget-row budget-head" aria-hidden="true">
+          <span /><span>Hours per week</span><span /><span>Spent</span><span>Remaining</span>
         </div>
-      </div>
-
-      <div className="card">
-        <h2>
-          Weekly budgets {saved ? <span className="small" style={{ color: "var(--ok)" }}>saved ✓</span> : null}
-        </h2>
         {liveCats.map((c) => {
           const entry = status?.entries.find((e) => e.categoryId === c.id)
           const spent = entry?.spentSec ?? status?.spentByCategory[c.id] ?? 0
           const budgetSec = entry?.budgetSec ?? 0
-          const pct = budgetSec > 0 ? Math.min(100, (spent / budgetSec) * 100) : 0
+          const ratio = budgetSec > 0 ? spent / budgetSec : 0
           const over = entry?.over ?? false
+          const near = !over && ratio >= 0.8
+          const state = over ? "over" : near ? "near" : ""
           return (
-            <div key={c.id} className="queueitem" style={{ flexWrap: "wrap" }}>
-              <span style={{ width: 190 }}>
-                {c.emoji} {c.name}
+            <div key={c.id} className="queueitem budget-row">
+              <span className="budget-name">
+                <span className="swatch" style={{ background: c.color }} aria-hidden="true" />
+                <span className="truncate">{c.name}</span>
               </span>
-              <label className="small">
-                h/week
-                <input
-                  type="number"
-                  min={0}
-                  step={0.25}
-                  placeholder="—"
-                  style={{ width: 76 }}
-                  value={draft[c.id] ?? ""}
-                  onChange={(e) => setDraft({ ...draft, [c.id]: e.target.value })}
-                />
-              </label>
-              <div className="sharebar" style={{ maxWidth: 220 }}>
-                <div
-                  style={{
-                    width: `${pct}%`,
-                    background: over ? "var(--danger)" : pct > 80 ? "var(--warn)" : "var(--accent)"
-                  }}
-                />
-              </div>
-              <span className="small" style={{ width: 150 }}>
-                {fmtDur(spent)} spent{budgetSec > 0 ? ` / ${fmtDur(budgetSec)}` : ""}
+              <input
+                type="number"
+                min={0}
+                step={0.25}
+                placeholder="No budget"
+                aria-label={`${c.name} hours per week`}
+                value={draft[c.id] ?? ""}
+                onChange={(e) => setDraft({ ...draft, [c.id]: e.target.value })}
+              />
+              {budgetSec > 0 ? (
+                <span className="meter" aria-hidden="true">
+                  <span style={{ width: `${Math.min(100, ratio * 100)}%` }} />
+                </span>
+              ) : <span />}
+              <span className="budget-spent money">
+                {budgetSec > 0 ? `${fmtDur(spent)} of ${fmtDur(budgetSec)}` : spent > 0 ? fmtDur(spent) : <span className="muted">—</span>}
               </span>
-              {over ? (
-                <span className="small" style={{ color: "var(--danger)" }}>
-                  {fmtDur(entry!.deltaSec)} over
-                </span>
-              ) : budgetSec > 0 ? (
-                <span className="small" style={{ color: "var(--ok)" }}>
-                  {fmtDur(-entry!.deltaSec)} left
-                </span>
-              ) : null}
+              <span className={"budget-left " + state}>
+                {over ? `${fmtDur(entry!.deltaSec)} over` : budgetSec > 0 ? `${fmtDur(-entry!.deltaSec)} left${near ? ", nearly used" : ""}` : ""}
+              </span>
             </div>
           )
         })}
-        <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>
-          <button className="btn btn-primary" onClick={() => void save()}>
-            Save budgets
-          </button>
+        <div className="actions">
+          <span className="status" role="status" aria-live="polite">{saved ? "Budgets saved." : ""}</span>
+          <button type="button" className="btn btn-primary" onClick={() => void save()}>Save budgets</button>
         </div>
-      </div>
+      </section>
+
+      <section className="card" aria-labelledby="mode-title">
+        <div className="section-head">
+          <div>
+            <h2 id="mode-title">On YouTube</h2>
+            <p className="section-note">What happens to videos from a category that’s over its budget. Videos YT Ledger can’t categorize are never touched.</p>
+          </div>
+        </div>
+        <BudgetModeControl value={settings.budgetMode} onChange={(mode) => void patchSettings({ budgetMode: mode })} />
+        <p className="muted" style={{ margin: "12px 0 0", maxWidth: "40em" }}>{budgetModeDetail(settings.budgetMode)}</p>
+      </section>
     </div>
   )
 }

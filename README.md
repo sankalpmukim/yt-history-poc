@@ -21,7 +21,7 @@ YT Ledger is a Chromium browser extension (Manifest V3, built with [Plasmo](http
 - **Subcategories.** Editable subcategories under every category (e.g. *Practical how-tos › Coding*), with sensible defaults. Charts show top-level categories and drill down in place.
 - **Auto-categorization rules.** Match by exact channel, channel substring, title keywords, title regex, Shorts and maximum duration. Rules run in priority order (first match wins) and can target a category or a subcategory. Test a rule against your history before saving. Manual categorization always wins over rules.
 - **Ledger.** Every watch event grouped by day, with search, category/subcategory filters, an "uncategorized only" review queue, inline categorization, and bulk edits.
-- **Overview and Insights.** Estimated watch time per range (today, 7, 30, 90 days, all), a daily time trace, a value index, low-value share, channel rankings, weekday patterns and rule suggestions.
+- **Overview and Insights.** Estimated watch time per range (today, 7, 30, 90 days, all), a daily chart, low-value share, channel rankings, weekday patterns and rule suggestions.
 - **Weekly budgets.** Hours per week per category (subcategory time rolls up into its parent), with three enforcement modes on youtube.com:
   - **Off:** track only, no changes to YouTube.
   - **Gentle:** over-budget videos get an outline and an "over budget" chip, plus a dismissible banner on the watch page.
@@ -122,4 +122,4 @@ Issues and pull requests are welcome. Before opening a PR, run `pnpm test` and `
 
 ## License
 
-License: TBD. The bundled Barlow Condensed fonts are licensed under the [SIL Open Font License 1.1](assets/fonts/OFL-Barlow.txt).
+License: TBD. The bundled Source Serif 4 and Public Sans fonts are licensed under the SIL Open Font License 1.1 ([Source Serif 4](assets/fonts/OFL-SourceSerif4.txt), [Public Sans](assets/fonts/OFL-PublicSans.txt)).

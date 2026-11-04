@@ -3,10 +3,9 @@
  * Hash-routed views over a live snapshot of the whole ledger.
  */
 
-import { useCallback, useEffect, useState } from "react"
-import { loadLedgerData, subscribeLedger, settingsOf, type LedgerData } from "./lib/data"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { loadLedgerData, subscribeLedger, type LedgerData } from "./lib/data"
 import { CSS } from "./lib/styles"
-import { APP_VERSION } from "../core/version"
 import { OverviewView } from "./views/overview"
 import { LedgerView } from "./views/ledger"
 import { RulesView } from "./views/rules"
@@ -15,24 +14,23 @@ import { SettingsView } from "./views/settings"
 import { InsightsView } from "./views/insights"
 import { OnboardingView } from "./views/onboarding"
 import { BudgetsView } from "./views/budgets"
-import { NavIcon, type NavIconName } from "./lib/icons"
+import { uncategorizedVideos } from "../core/aggregate"
+import { relativeTime } from "./lib/ui"
 
 interface RouteDef {
   id: string
   label: string
-  accessibleLabel: string
-  icon: NavIconName
   el: (props: { data: LedgerData; reload: () => Promise<void> }) => JSX.Element
 }
 
 const ROUTES: RouteDef[] = [
-  { id: "overview", label: "Overview", accessibleLabel: "📊 Overview", icon: "overview", el: (p) => <OverviewView {...p} /> },
-  { id: "ledger", label: "Ledger", accessibleLabel: "🧾 Ledger", icon: "ledger", el: (p) => <LedgerView {...p} /> },
-  { id: "rules", label: "Rules", accessibleLabel: "⚖️ Rules", icon: "rules", el: (p) => <RulesView {...p} /> },
-  { id: "categories", label: "Categories", accessibleLabel: "🏷️ Categories", icon: "categories", el: (p) => <CategoriesView {...p} /> },
-  { id: "insights", label: "Insights", accessibleLabel: "🔍 Insights", icon: "insights", el: (p) => <InsightsView {...p} /> },
-  { id: "budgets", label: "Budgets", accessibleLabel: "⏱️ Budgets", icon: "budgets", el: (p) => <BudgetsView {...p} /> },
-  { id: "settings", label: "Settings", accessibleLabel: "⚙️ Settings", icon: "settings", el: (p) => <SettingsView {...p} /> }
+  { id: "overview", label: "Overview", el: (p) => <OverviewView {...p} /> },
+  { id: "ledger", label: "Ledger", el: (p) => <LedgerView {...p} /> },
+  { id: "rules", label: "Rules", el: (p) => <RulesView {...p} /> },
+  { id: "categories", label: "Categories", el: (p) => <CategoriesView {...p} /> },
+  { id: "insights", label: "Insights", el: (p) => <InsightsView {...p} /> },
+  { id: "budgets", label: "Budgets", el: (p) => <BudgetsView {...p} /> },
+  { id: "settings", label: "Settings", el: (p) => <SettingsView {...p} /> }
 ]
 
 function useHashRoute(): [string, (id: string) => void] {
@@ -69,11 +67,17 @@ export default function Dashboard() {
     if (onboarded && route === "onboarding") navigate("overview")
   }, [data, onboarded, route])
 
+  const uncategorizedCount = useMemo(
+    () => (data ? uncategorizedVideos({ videos: data.videos, events: data.events, limit: 100000 }).length : 0),
+    [data]
+  )
+
   if (data == null) {
     return (
-      <div style={{ padding: 40 }} className="muted">
-        Loading ledger…
-      </div>
+      <>
+        <style>{CSS}</style>
+        <div className="loading" role="status">Loading your ledger…</div>
+      </>
     )
   }
 
@@ -91,46 +95,49 @@ export default function Dashboard() {
   }
 
   const active = ROUTES.find((r) => r.id === route) ?? ROUTES[0]
-  const settings = settingsOf(data)
-  const lastSync = data.meta?.lastSyncedAt
-    ? new Date(data.meta.lastSyncedAt).toLocaleString()
-    : "never"
+  const overCount = data.budgetStatus?.entries.filter((e) => e.over).length ?? 0
+  const status = data.meta?.lastSyncStatus ?? ""
+  const counts: Record<string, { text: string; label: string; over?: boolean } | undefined> = {
+    ledger: uncategorizedCount > 0 ? { text: String(uncategorizedCount), label: `${uncategorizedCount} without a category` } : undefined,
+    budgets: overCount > 0 ? { text: `${overCount} over`, label: `${overCount} over budget`, over: true } : undefined
+  }
 
   return (
     <>
       <style>{CSS}</style>
       <div className="app">
-        <div className="sidebar">
-          <div className="brand">
-            <span className="brand-mark"><NavIcon name="overview" /></span>
-            YT Ledger <span className="sub">v{APP_VERSION}</span>
-          </div>
-          <nav className="nav">
-            {ROUTES.map((r) => (
-              <a
-                key={r.id}
-                href={"#/" + r.id}
-                className={r.id === active.id ? "active" : ""}
-                aria-current={r.id === active.id ? "page" : undefined}
-                aria-label={r.accessibleLabel}
-                onClick={() => navigate(r.id)}
-              >
-                <NavIcon name={r.icon} className="nav-icon" />
-                <span>{r.label}</span>
-              </a>
-            ))}
+        <aside className="sidebar">
+          <p className="brand">YT Ledger</p>
+          <nav className="nav" aria-label="Dashboard">
+            {ROUTES.map((r) => {
+              const count = counts[r.id]
+              return (
+                <a
+                  key={r.id}
+                  href={"#/" + r.id}
+                  className={r.id === active.id ? "active" : ""}
+                  aria-current={r.id === active.id ? "page" : undefined}
+                  onClick={() => navigate(r.id)}
+                >
+                  <span>{r.label}</span>
+                  {count ? (
+                    <span className={"nav-count" + (count.over ? " over" : "")}>
+                      <span aria-hidden="true">{count.text}</span>
+                      <span className="sr-only">, {count.label}</span>
+                    </span>
+                  ) : null}
+                </a>
+              )
+            })}
           </nav>
           <div className="sidefoot">
-            {Object.keys(data.videos).length} videos · {data.events.length} events
-            <br />
-            last sync: {lastSync}
-            <br />
-            <span className="muted">{data.meta?.lastSyncStatus}</span>
+            {data.meta?.lastSyncedAt ? `Synced ${relativeTime(data.meta.lastSyncedAt)}` : "Not synced yet. Open YouTube to sync."}
+            {status && !status.startsWith("ok") ? <div>{status}</div> : null}
           </div>
-        </div>
-        <div className="main">
+        </aside>
+        <main className="main" id="main" tabIndex={-1}>
           <active.el data={data} reload={reload} />
-        </div>
+        </main>
       </div>
     </>
   )

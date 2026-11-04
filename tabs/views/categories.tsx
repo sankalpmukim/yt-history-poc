@@ -1,12 +1,13 @@
-/** Categories manager: a high-to-low value ladder with pointer and keyboard reordering. */
+/** Categories: the value ladder, highest at the top, with drag, keyboard and button reordering. */
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import type { LedgerData } from "../lib/data"
 import { writeCategories, writeSubcategories } from "../lib/data"
 import type { Category, Subcategory } from "../../core/types"
 import { runRulesPass } from "../../core/ledger"
 import { ChromeKV } from "../../core/storage"
 import { reorderById, scoreAtPosition } from "../../core/taxonomy"
+import { plural } from "../lib/ui"
 
 export function CategoriesView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const categories = useMemo(() => [...data.categories].sort((a, b) => a.order - b.order), [data.categories])
@@ -23,9 +24,15 @@ export function CategoriesView({ data, reload }: { data: LedgerData; reload: () 
     await runRulesPass(new ChromeKV(), new Date())
     await reload()
   }
-  const moveCategory = (id: string, to: number) => persist(reorderById(categories, id, to))
+  const [announcement, setAnnouncement] = useState("")
+  const moveCategory = (id: string, to: number) => {
+    const name = categories.find((category) => category.id === id)?.name ?? "Category"
+    setAnnouncement(`${name} moved to position ${to + 1} of ${categories.length}.`)
+    return persist(reorderById(categories, id, to))
+  }
   const moveSubcategory = (parentId: string, id: string, to: number) => {
     const siblings = subs.filter((sub) => sub.parentId === parentId)
+    setAnnouncement(`${siblings.find((sub) => sub.id === id)?.name ?? "Subcategory"} moved to position ${to + 1} of ${siblings.length}.`)
     const reordered = reorderById(siblings, id, to).map((sub, order) => ({ ...sub, order }))
     const byId = new Map(reordered.map((sub) => [sub.id, sub]))
     return persistSubs(subs.map((sub) => byId.get(sub.id) ?? sub))
@@ -49,17 +56,20 @@ export function CategoriesView({ data, reload }: { data: LedgerData; reload: () 
       if (source.kind === "subcategory" && source.parentId === parentId) void moveSubcategory(parentId, source.id, targetIndex)
     } catch { /* Ignore malformed external drops. */ }
   }
-  const archivedWarning = (category: Category) => {
-    const count = rulesUsing(category.id)
-    return category.archivedAt && count > 0
-      ? <span className="small" style={{ color: "var(--warn)" }}>{count} rule(s) target this — skipped while archived</span>
-      : null
+  const pausedRules = (id: string, archived: boolean) => {
+    const count = rulesUsing(id)
+    if (count === 0) return null
+    return archived
+      ? <span className="small text-warn">{plural(count, "rule")} paused while archived</span>
+      : <span className="item-meta">{plural(count, "rule")}</span>
   }
+  const toggleArchive = <T extends { id: string; archivedAt?: string }>(items: T[], id: string): T[] =>
+    items.map((item) => item.id === id ? { ...item, archivedAt: item.archivedAt ? undefined : new Date().toISOString() } : item)
 
   const addCategory = async () => {
     let id = "new-category"
     for (let suffix = 2; categories.some((category) => category.id === id) || subs.some((sub) => sub.id === id); suffix++) id = `new-category-${suffix}`
-    await persist([...categories, { id, name: "New category", emoji: "🏷️", color: "#60a5fa", valueScore: 0, order: categories.length }])
+    await persist([...categories, { id, name: "New category", emoji: "🏷️", color: "#6f7f9e", valueScore: 0, order: categories.length }])
   }
   const addSubcategory = async (parentId: string) => {
     let id = `${parentId}-new`
@@ -70,86 +80,99 @@ export function CategoriesView({ data, reload }: { data: LedgerData; reload: () 
 
   return (
     <div>
-      <div className="spread" style={{ marginBottom: 8 }}>
+      <div className="page-head">
         <h1>Categories</h1>
-        <button className="btn btn-primary" onClick={() => void addCategory()}>+ Add category</button>
+        <button type="button" className="btn btn-primary" onClick={() => void addCategory()}>Add category</button>
       </div>
-      <p className="hint">Arrange categories from higher value at the top to lower value at the bottom. Drag rows to reorder, or focus the grip and use the arrow keys. Archived items keep history but stop receiving new videos.</p>
+      <p className="lede">
+        Order matters: the higher a category sits, the more its time is worth. Drag the grip or use
+        the arrows to move one. Archiving keeps past videos where they are and stops new ones from
+        landing there.
+      </p>
 
-      <div className="card" role="list" aria-label="Categories, ordered from higher to lower value">
-        {categories.map((category, index) => {
-          const children = subs.filter((sub) => sub.parentId === category.id)
-          return (
-            <div
-              key={category.id}
-              className="category-ladder-item"
-              role="listitem"
-              data-testid={`category-item-${category.id}`}
-              style={{ opacity: category.archivedAt ? 0.55 : 1 }}
-              onDragOver={(event) => { if (event.dataTransfer.types.includes("text/plain")) event.preventDefault() }}
-              onDrop={(event) => dropCategory(event, index)}
-            >
-              <div className="queueitem category-main-row" draggable={false}>
-                <button
-                  type="button"
-                  className="btn btn-sm taxonomy-drag-handle"
-                  aria-label={`Reorder category ${category.name}; use arrow keys`}
-                  aria-keyshortcuts="ArrowUp ArrowDown"
-                  title="Drag to reorder · arrow keys also work"
-                  draggable
-                  onDragStart={(event) => dragStart(event, "category", category.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "ArrowUp" && index > 0) { event.preventDefault(); void moveCategory(category.id, index - 1) }
-                    if (event.key === "ArrowDown" && index < categories.length - 1) { event.preventDefault(); void moveCategory(category.id, index + 1) }
-                  }}
-                >⠿</button>
-                <input aria-label={`${category.name} emoji`} type="text" value={category.emoji} maxLength={4} style={{ width: 46, textAlign: "center" }} onChange={(event) => void persist(categories.map((item) => item.id === category.id ? { ...item, emoji: event.target.value } : item))} />
-                <input aria-label={`${category.name} name`} type="text" value={category.name} style={{ width: 210 }} onChange={(event) => void persist(categories.map((item) => item.id === category.id ? { ...item, name: event.target.value } : item))} />
-                <input aria-label={`${category.name} color`} type="color" value={category.color} style={{ width: 42, height: 32, padding: 2, background: "transparent", border: 0 }} onChange={(event) => void persist(categories.map((item) => item.id === category.id ? { ...item, color: event.target.value } : item))} title={category.color} />
-                <span className="category-position-track" aria-label={index === 0 ? "Highest value position" : index === categories.length - 1 ? "Lowest value position" : "Value position"}>
-                  <span style={{ width: `${scoreAtPosition(index, categories.length) * 20}%`, background: category.color }} />
-                </span>
-                <span className="muted small">{rulesUsing(category.id)} rule(s)</span>
-                {archivedWarning(category)}
-                <button type="button" className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => void persist(categories.map((item) => item.id === category.id ? { ...item, archivedAt: item.archivedAt ? undefined : new Date().toISOString() } : item))}>{category.archivedAt ? "Unarchive" : "Archive"}</button>
-                <button type="button" className="btn btn-sm" onClick={() => void addSubcategory(category.id)}>+ sub</button>
-              </div>
-              {children.map((sub, subIndex) => {
-                const siblings = children
-                return (
+      <section className="card" aria-label="Categories, ordered from higher to lower value">
+        <div className="ladder-end" aria-hidden="true">Higher value</div>
+        <div role="list">
+          {categories.map((category, index) => {
+            const children = subs.filter((sub) => sub.parentId === category.id)
+            const rank = `Position ${index + 1} of ${categories.length}`
+            return (
+              <div
+                key={category.id}
+                className={"category-ladder-item" + (category.archivedAt ? " archived" : "")}
+                role="listitem"
+                data-testid={`category-item-${category.id}`}
+                onDragOver={(event) => { if (event.dataTransfer.types.includes("text/plain")) event.preventDefault() }}
+                onDrop={(event) => dropCategory(event, index)}
+              >
+                <div className="queueitem category-main-row" draggable={false}>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-quiet taxonomy-drag-handle"
+                    aria-label={`Reorder category ${category.name}; use arrow keys`}
+                    aria-keyshortcuts="ArrowUp ArrowDown"
+                    title="Drag to reorder, or use the arrow keys"
+                    draggable
+                    onDragStart={(event) => dragStart(event, "category", category.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowUp" && index > 0) { event.preventDefault(); void moveCategory(category.id, index - 1) }
+                      if (event.key === "ArrowDown" && index < categories.length - 1) { event.preventDefault(); void moveCategory(category.id, index + 1) }
+                    }}
+                  >⠿</button>
+                  <input aria-label={`${category.name} emoji`} className="emoji-input" type="text" value={category.emoji} maxLength={4} onChange={(event) => void persist(categories.map((item) => item.id === category.id ? { ...item, emoji: event.target.value } : item))} />
+                  <input aria-label={`${category.name} name`} type="text" value={category.name} onChange={(event) => void persist(categories.map((item) => item.id === category.id ? { ...item, name: event.target.value } : item))} />
+                  <input aria-label={`${category.name} color`} type="color" value={category.color} onChange={(event) => void persist(categories.map((item) => item.id === category.id ? { ...item, color: event.target.value } : item))} title={category.color} />
+                  <span className="category-position-track" aria-hidden="true">
+                    <span style={{ width: `${Math.max(4, scoreAtPosition(index, categories.length) * 20)}%` }} />
+                  </span>
+                  <span className="sr-only">{rank}{index === 0 ? ", highest value" : index === categories.length - 1 ? ", lowest value" : ""}</span>
+                  {category.archivedAt ? <span className="tag" style={{ marginLeft: 0 }}>Archived</span> : null}
+                  {pausedRules(category.id, !!category.archivedAt)}
+                  <span className="item-actions row-push">
+                    <button type="button" className="btn btn-sm btn-quiet btn-icon" aria-label={`Move ${category.name} up`} disabled={index === 0} onClick={() => void moveCategory(category.id, index - 1)}>↑</button>
+                    <button type="button" className="btn btn-sm btn-quiet btn-icon" aria-label={`Move ${category.name} down`} disabled={index === categories.length - 1} onClick={() => void moveCategory(category.id, index + 1)}>↓</button>
+                    <button type="button" className="btn btn-sm btn-quiet" onClick={() => void addSubcategory(category.id)}>Add subcategory</button>
+                    <button type="button" className="btn btn-sm btn-quiet" onClick={() => void persist(toggleArchive(categories, category.id))}>{category.archivedAt ? "Unarchive" : "Archive"}</button>
+                  </span>
+                </div>
+                {children.map((sub, subIndex) => (
                   <div
                     key={sub.id}
-                    className="queueitem category-sub-row"
+                    className={"queueitem category-sub-row" + (sub.archivedAt ? " archived" : "")}
                     data-testid={`subcategory-item-${sub.id}`}
-                    style={{ opacity: sub.archivedAt ? 0.55 : 1 }}
                     onDragOver={(event) => { event.preventDefault(); event.stopPropagation() }}
                     onDrop={(event) => dropSubcategory(event, category.id, subIndex)}
                   >
                     <button
                       type="button"
-                      className="btn btn-sm taxonomy-drag-handle"
+                      className="btn btn-sm btn-quiet taxonomy-drag-handle"
                       aria-label={`Reorder ${sub.name} within ${category.name}; use arrow keys`}
                       aria-keyshortcuts="ArrowUp ArrowDown"
-                      title="Drag to reorder · arrow keys also work"
+                      title="Drag to reorder, or use the arrow keys"
                       draggable
                       onDragStart={(event) => { event.stopPropagation(); dragStart(event, "subcategory", sub.id, category.id) }}
                       onKeyDown={(event) => {
                         if (event.key === "ArrowUp" && subIndex > 0) { event.preventDefault(); void moveSubcategory(category.id, sub.id, subIndex - 1) }
-                        if (event.key === "ArrowDown" && subIndex < siblings.length - 1) { event.preventDefault(); void moveSubcategory(category.id, sub.id, subIndex + 1) }
+                        if (event.key === "ArrowDown" && subIndex < children.length - 1) { event.preventDefault(); void moveSubcategory(category.id, sub.id, subIndex + 1) }
                       }}
                     >⠿</button>
-                    <input aria-label={`${sub.name} emoji`} type="text" value={sub.emoji} maxLength={4} style={{ width: 46, textAlign: "center" }} onChange={(event) => void persistSubs(subs.map((item) => item.id === sub.id ? { ...item, emoji: event.target.value } : item))} />
-                    <input aria-label={`${sub.name} name`} type="text" value={sub.name} style={{ width: 210 }} onChange={(event) => void persistSubs(subs.map((item) => item.id === sub.id ? { ...item, name: event.target.value } : item))} />
-                    <input aria-label={`${sub.name} color`} type="color" value={sub.color ?? category.color} style={{ width: 42, height: 32, padding: 2, background: "transparent", border: 0 }} onChange={(event) => void persistSubs(subs.map((item) => item.id === sub.id ? { ...item, color: event.target.value } : item))} title={sub.color ?? category.color} />
-                    <span className="muted small">{rulesUsing(sub.id)} rule(s)</span>
-                    <button type="button" className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => void persistSubs(subs.map((item) => item.id === sub.id ? { ...item, archivedAt: item.archivedAt ? undefined : new Date().toISOString() } : item))}>{sub.archivedAt ? "Unarchive" : "Archive"}</button>
+                    <input aria-label={`${sub.name} emoji`} className="emoji-input" type="text" value={sub.emoji} maxLength={4} onChange={(event) => void persistSubs(subs.map((item) => item.id === sub.id ? { ...item, emoji: event.target.value } : item))} />
+                    <input aria-label={`${sub.name} name`} type="text" value={sub.name} onChange={(event) => void persistSubs(subs.map((item) => item.id === sub.id ? { ...item, name: event.target.value } : item))} />
+                    <input aria-label={`${sub.name} color`} type="color" value={sub.color ?? category.color} onChange={(event) => void persistSubs(subs.map((item) => item.id === sub.id ? { ...item, color: event.target.value } : item))} title={sub.color ?? category.color} />
+                    {sub.archivedAt ? <span className="tag" style={{ marginLeft: 0 }}>Archived</span> : null}
+                    {pausedRules(sub.id, !!sub.archivedAt)}
+                    <span className="item-actions row-push">
+                      <button type="button" className="btn btn-sm btn-quiet" onClick={() => void persistSubs(toggleArchive(subs, sub.id))}>{sub.archivedAt ? "Unarchive" : "Archive"}</button>
+                    </span>
                   </div>
-                )
-              })}
-            </div>
-          )
-        })}
-      </div>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+        <div className="ladder-end" aria-hidden="true">Lower value</div>
+        <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
+      </section>
     </div>
   )
 }

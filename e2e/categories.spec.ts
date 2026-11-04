@@ -26,7 +26,7 @@ test("Category ladder drag reorder, subcategory reorder, archive and derived ran
   expect(originalVideos.ylqa0000001.autoCategoryId).toBe("news-world")
 
   const practical = page.getByTestId("category-item-practical")
-  await practical.getByRole("button", { name: "+ sub" }).click()
+  await practical.getByRole("button", { name: "Add subcategory" }).click()
   const createdSub = page.getByTestId("subcategory-item-practical-new")
   await createdSub.getByLabel("New subcategory name").fill("QA lab")
   const renamedSub = page.getByTestId("subcategory-item-practical-new")

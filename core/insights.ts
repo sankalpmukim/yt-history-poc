@@ -36,7 +36,7 @@ export function channelTimeByScoreBand(params: {
     if (row.categoryId == null || row.estimatedSeconds == null) continue
     const score = scoreOf.get(row.categoryId)
     if (score == null || score < params.minScore || score > params.maxScore) continue
-    const ch = row.video.channel || "(unknown)"
+    const ch = row.video.channel || "Unknown channel"
     const cur = byChannel.get(ch) ?? { channel: ch, seconds: 0, watchCount: 0 }
     cur.seconds += row.estimatedSeconds
     cur.watchCount++
@@ -133,7 +133,7 @@ export function suggestChannelRules(params: {
   for (const row of agg.rows) {
     const cat = row.video.categoryOverride
     if (cat == null) continue
-    const ch = row.video.channel || "(unknown)"
+    const ch = row.video.channel || "Unknown channel"
     if (!ch) continue
     const key = `${ch.toLowerCase()}||${cat}`
     const cur = pairs.get(key) ?? { channel: ch, categoryId: cat, count: 0, seconds: 0 }
@@ -147,7 +147,7 @@ export function suggestChannelRules(params: {
       kind: "manual-consistency",
       channel: p.channel,
       categoryId: p.categoryId,
-      evidence: `${p.count} videos manually categorized the same way`,
+      evidence: `You gave ${p.count} of its videos the same category`,
       uncategorizedSeconds: 0
     })
     suggested.add(p.channel.toLowerCase())
@@ -158,7 +158,7 @@ export function suggestChannelRules(params: {
   const byChannel = new Map<string, { seconds: number; count: number }>()
   for (const row of agg.rows) {
     if (row.categoryId != null || row.estimatedSeconds == null) continue
-    const ch = row.video.channel || "(unknown)"
+    const ch = row.video.channel || "Unknown channel"
     if (!ch) continue
     const cur = byChannel.get(ch) ?? { seconds: 0, count: 0 }
     cur.seconds += row.estimatedSeconds
@@ -172,7 +172,7 @@ export function suggestChannelRules(params: {
       kind: "uncategorized-time",
       channel: c[0],
       categoryId: null,
-      evidence: `${c[1].count} uncategorized video(s)`,
+      evidence: `${c[1].count} ${c[1].count === 1 ? "watch" : "watches"} with no category`,
       uncategorizedSeconds: c[1].seconds
     })
     if (out.length >= (params.limit ?? 6)) break

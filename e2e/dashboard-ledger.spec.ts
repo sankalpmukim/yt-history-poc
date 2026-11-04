@@ -28,7 +28,7 @@ test("Ledger search, subcategory filter, bulk assign/clear, and single-row subca
   await expect(row).toContainText("Practical how-tos › Coding")
 
   await row.locator('input[type="checkbox"]').check()
-  await page.getByRole("button", { name: "Clear overrides" }).click()
+  await page.getByRole("button", { name: "Reset to automatic" }).click()
   await expect(row).toContainText("News & updates › World news")
 
   await search.fill("aircraft industry")

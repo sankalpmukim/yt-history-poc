@@ -69,21 +69,7 @@ const server = createServer((req, res) => {
     }
     const script = `
       (() => {
-        ${theme === "system" ? "" : `
-          document.documentElement.style.colorScheme = "${theme}";
-          const palette = ${JSON.stringify(theme === "light" ? {
-            "--bg": "#eef3f1", "--panel": "#f8faf8", "--panel2": "#e4ece9", "--border": "#c8d5d1",
-            "--text": "#18323a", "--muted": "#536d71", "--accent": "#147d80", "--danger": "#a33f35",
-            "--ok": "#32715e", "--warn": "#986319", "--ink-soft": "#284a52", "--focus": "#147d80",
-            "--rule": "rgba(40,74,82,.10)", "--shadow": "0 7px 20px rgba(24,50,58,.045)"
-          } : {
-            "--bg": "#14272b", "--panel": "#1b3237", "--panel2": "#244047", "--border": "#38555a",
-            "--text": "#e8f0ec", "--muted": "#a5bbb7", "--accent": "#69c2b8", "--danger": "#ff9384",
-            "--ok": "#84c7a1", "--warn": "#e0b568", "--ink-soft": "#c5d8d3", "--focus": "#8bd8cb",
-            "--rule": "rgba(197,216,211,.09)", "--shadow": "0 7px 20px rgba(0,0,0,.14)"
-          })};
-          for (const [name, value] of Object.entries(palette)) document.documentElement.style.setProperty(name, value);
-        `}
+        ${theme === "system" ? "" : `document.documentElement.dataset.theme = "${theme}";`}
         const data = ${JSON.stringify(data)};
         if (location.hash.includes("/onboarding")) data["yl.v2.meta"] = null;
         const listeners = new Set();

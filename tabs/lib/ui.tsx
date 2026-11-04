@@ -1,6 +1,7 @@
 /** Shared UI atoms for the dashboard. */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 import type { BudgetMode, Category, Subcategory } from "../../core/types"
 import { chipLabelForTarget } from "../../core/taxonomy"
 import { runRulesPass } from "../../core/ledger"
@@ -31,36 +32,39 @@ export function fmtDate(dateKey: string): string {
   })
 }
 
-export function StatCard({ value, label, sub }: { value: ReactNode; label: string; sub?: string }) {
-  return (
-    <div className="stat">
-      <div className="v">{value}</div>
-      <div className="l">
-        {label}
-        {sub ? <span className="muted"> · {sub}</span> : null}
-      </div>
-    </div>
-  )
+/** "3 watches", "1 watch". Pass the plural when it isn't just +s. */
+export function plural(n: number, one: string, many?: string): string {
+  return `${n.toLocaleString()} ${n === 1 ? one : many ?? one + "s"}`
 }
 
-export function catColor(cat: Category | undefined): string {
-  return cat?.color ?? "#6b7280"
+/** "just now", "12 minutes ago", "3 hours ago", "yesterday", or a date. */
+export function relativeTime(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return "never"
+  const then = new Date(iso).getTime()
+  if (!Number.isFinite(then)) return "never"
+  const mins = Math.round((now - then) / 60000)
+  if (mins < 1) return "just now"
+  if (mins < 60) return `${plural(mins, "minute")} ago`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `${plural(hours, "hour")} ago`
+  if (hours < 48) return "yesterday"
+  return new Date(then).toLocaleDateString(undefined, { month: "short", day: "numeric" })
 }
+
+export const NEUTRAL_COLOR = "#737a65"
 
 export function CategoryChip({
   category,
   targetId,
   categories,
   subcategories,
-  onClick,
-  small
+  onClick
 }: {
   category?: Category | undefined
   targetId?: string | null
   categories?: Category[]
   subcategories?: Subcategory[]
   onClick?: () => void
-  small?: boolean
 }) {
   const chip =
     targetId !== undefined && categories
@@ -70,20 +74,91 @@ export function CategoryChip({
         : null
   if (!chip) {
     return (
-      <button className="chip none" onClick={onClick} title="Uncategorized — click to categorize">
-        ？ Uncategorized
+      <button type="button" className="chip none" onClick={onClick} title="Choose a category">
+        Uncategorized
       </button>
     )
   }
   return (
-    <button
-      className="chip"
-      onClick={onClick}
-      style={{ color: chip.color, borderColor: chip.color + "88", fontSize: small ? 11 : undefined }}
-      title={chip.text}
-    >
-      {chip.emoji} {chip.text}
+    <button type="button" className="chip" onClick={onClick} title={`${chip.text}. Change category`}>
+      <span className="swatch" style={{ background: chip.color }} aria-hidden="true" />
+      <span className="chip-text">{chip.text}</span>
     </button>
+  )
+}
+
+const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Accessible modal: portal, focus moved in and restored, Tab trapped, Escape
+ * closes. Keys are handled at the document by the topmost dialog only, so a
+ * dialog opened from another closes only itself, and the trap still works
+ * after the focused control unmounts (focus would otherwise fall to <body>).
+ */
+export function Dialog({
+  labelledBy,
+  onClose,
+  className = "",
+  initialFocus,
+  children
+}: {
+  labelledBy: string
+  onClose: () => void
+  className?: string
+  initialFocus?: React.RefObject<HTMLElement>
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    const dialog = ref.current
+    const target = initialFocus?.current ?? dialog?.querySelector<HTMLElement>(FOCUSABLE)
+    ;(target ?? dialog)?.focus()
+    const isTopmost = () => {
+      const all = document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')
+      return all[all.length - 1] === dialog
+    }
+    const controls = () => Array.from(dialog?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter((el) => el.offsetParent !== null)
+    const onKey = (event: KeyboardEvent) => {
+      if (!dialog || !isTopmost()) return
+      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); return }
+      if (event.key !== "Tab") return
+      const list = controls()
+      if (!list.length) { event.preventDefault(); dialog.focus(); return }
+      const first = list[0]
+      const last = list[list.length - 1]
+      const active = document.activeElement
+      const inside = active instanceof Node && dialog.contains(active)
+      if (!inside) { event.preventDefault(); (event.shiftKey ? last : first).focus() }
+      else if (event.shiftKey && (active === first || active === dialog)) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus() }
+    }
+    const onFocusIn = (event: FocusEvent) => {
+      if (!dialog || !isTopmost()) return
+      if (event.target instanceof Node && !dialog.contains(event.target)) dialog.focus()
+    }
+    document.addEventListener("keydown", onKey)
+    document.addEventListener("focusin", onFocusIn)
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      document.removeEventListener("focusin", onFocusIn)
+      // Return focus to the opener; if it's gone, to the page itself.
+      const fallback = document.getElementById("main")
+      setTimeout(() => {
+        if (previous && document.contains(previous)) previous.focus()
+        else fallback?.focus()
+      })
+    }
+  }, [])
+  return createPortal(
+    <div className="overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <div ref={ref} className={`menu ${className}`} role="dialog" aria-modal="true" aria-labelledby={labelledBy} tabIndex={-1}>
+        {children}
+      </div>
+    </div>,
+    document.body
   )
 }
 
@@ -129,10 +204,9 @@ export function TaxonomyPicker({
   const [query, setQuery] = useState("")
   const [activeIndex, setActiveIndex] = useState(0)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [draft, setDraft] = useState({ name: "", emoji: "", color: "#3b82f6" })
+  const [draft, setDraft] = useState({ name: "", emoji: "", color: "#6f7f9e" })
   const [error, setError] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
-  const dialogRef = useRef<HTMLDivElement>(null)
   const live = useMemo(() => categories.filter((category) => !category.archivedAt), [categories])
   const liveSubs = useMemo(() => subcategories.filter((sub) => !sub.archivedAt), [subcategories])
   const trimmedQuery = query.trim()
@@ -145,19 +219,6 @@ export function TaxonomyPicker({
   ])
   const duplicateCategory = trimmedQuery.length > 0 && categories.some((category) => category.name.trim().toLocaleLowerCase() === lowerQuery)
   const duplicateSubParents = new Set(subcategories.filter((sub) => sub.name.trim().toLocaleLowerCase() === lowerQuery).map((sub) => sub.parentId))
-
-  useEffect(() => {
-    const previousFocus = document.activeElement as HTMLElement | null
-    inputRef.current?.focus()
-    return () => previousFocus?.focus()
-  }, [])
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); onClose() }
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [onClose])
 
   const uniqueId = (name: string) => {
     const base = name.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 32) || "category"
@@ -174,11 +235,12 @@ export function TaxonomyPicker({
     const name = trimmedQuery
     if (!name || duplicateCategory) return
     const id = uniqueId(name)
-    await writeCategories([...categories, { id, name, emoji: "🏷️", color: "#3b82f6", valueScore: 0, order: categories.length }])
+    await writeCategories([...categories, { id, name, emoji: "🏷️", color: "#6f7f9e", valueScore: 0, order: categories.length }])
     await refreshTaxonomy()
     setSelected(id)
     setQuery("")
     setError("")
+    inputRef.current?.focus()
   }
   const createSubcategory = async (parent: Category) => {
     const name = trimmedQuery
@@ -190,12 +252,13 @@ export function TaxonomyPicker({
     setSelected(id)
     setQuery("")
     setError("")
+    inputRef.current?.focus()
   }
   const beginEdit = (item: Category | Subcategory) => {
     const isCategory = "valueScore" in item
     const parent = isCategory ? undefined : categories.find((category) => category.id === item.parentId)
     setEditingId(item.id)
-    setDraft({ name: item.name, emoji: item.emoji, color: isCategory ? item.color : item.color ?? parent?.color ?? "#3b82f6" })
+    setDraft({ name: item.name, emoji: item.emoji, color: isCategory ? item.color : item.color ?? parent?.color ?? "#6f7f9e" })
     setError("")
   }
   const saveEdit = async (id: string) => {
@@ -221,6 +284,7 @@ export function TaxonomyPicker({
     await refreshTaxonomy()
     setEditingId(null)
     setError("")
+    inputRef.current?.focus()
   }
 
   const chooseWithKeyboard = (key: "ArrowDown" | "ArrowUp" | "Enter") => {
@@ -232,138 +296,109 @@ export function TaxonomyPicker({
     if (visibleTargets.length) setActiveIndex((index) => (index + (key === "ArrowDown" ? 1 : -1) + visibleTargets.length) % visibleTargets.length)
   }
 
+  const editForm = (id: string, includeColor = true) => editingId === id
+    ? <TaxonomyEditForm draft={draft} setDraft={setDraft} error={error} onSave={() => void saveEdit(id)} onCancel={() => { setEditingId(null); setError(""); inputRef.current?.focus() }} includeColor={includeColor} />
+    : null
+
   return (
-    <div
-      className="overlay"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div
-        ref={dialogRef}
-        className="menu taxonomy-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="taxonomy-picker-title"
+    <Dialog labelledBy="taxonomy-picker-title" onClose={onClose} className="taxonomy-dialog" initialFocus={inputRef}>
+      <h3 id="taxonomy-picker-title">{title}</h3>
+      {contextLine ? <p className="menu-context">{contextLine}</p> : null}
+      <label className="taxonomy-search-label" htmlFor="taxonomy-search">Search categories and subcategories</label>
+      <input
+        ref={inputRef}
+        id="taxonomy-search"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded="true"
+        aria-controls="taxonomy-options"
+        aria-describedby="taxonomy-search-hint"
+        aria-activedescendant={visibleTargets[activeIndex] ? `taxonomy-option-${visibleTargets[activeIndex]}` : undefined}
+        autoComplete="off"
+        type="text"
+        value={query}
+        placeholder="Type to filter, or to name a new category"
+        onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); setError("") }}
         onKeyDown={(event) => {
-          if (event.key !== "Tab") return
-          const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
-            'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])'
-          ) ?? []).filter((element) => element.offsetParent !== null)
-          if (!controls.length) { event.preventDefault(); inputRef.current?.focus(); return }
-          const first = controls[0]
-          const last = controls[controls.length - 1]
-          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
-          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); chooseWithKeyboard(event.key) }
+          if (event.key === "Enter") { event.preventDefault(); chooseWithKeyboard("Enter") }
         }}
-      >
-        <h3 id="taxonomy-picker-title">{title}</h3>
-        {contextLine ? <div className="muted small" style={{ marginBottom: 10 }}>{contextLine}</div> : null}
-        <label className="small taxonomy-search-label" htmlFor="taxonomy-search">Search or create</label>
-        <input
-          ref={inputRef}
-          id="taxonomy-search"
-          role="combobox"
-          aria-label="Search categories and subcategories"
-          aria-autocomplete="list"
-          aria-expanded="true"
-          aria-controls="taxonomy-options"
-          aria-activedescendant={visibleTargets[activeIndex] ? `taxonomy-option-${visibleTargets[activeIndex]}` : undefined}
-          autoComplete="off"
-          type="text"
-          value={query}
-          placeholder="Type a category or subcategory…"
-          onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); setError("") }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); chooseWithKeyboard(event.key) }
-            if (event.key === "Enter") { event.preventDefault(); chooseWithKeyboard("Enter") }
-          }}
-        />
-        {trimmedQuery ? (
-          <div className="taxonomy-create-row">
-            <button type="button" className="btn btn-sm" disabled={duplicateCategory} onClick={() => void createCategory()}>
-              Create category “{trimmedQuery}”
-            </button>
-            {duplicateCategory ? <span className="muted small">That category already exists.</span> : null}
-          </div>
-        ) : null}
-        {current && !selected ? <div className="taxonomy-notice">The current assignment is archived. It remains on existing history but cannot be selected for new assignments.</div> : null}
-        {categories.some((category) => category.archivedAt) || subcategories.some((sub) => sub.archivedAt)
-          ? <div className="muted small">Archived items stay on existing history and are hidden from new picks.</div>
-          : null}
-        <div id="taxonomy-options" role="listbox" aria-label="Available categories and subcategories" className="taxonomy-options">
-          {live.map((category) => {
-            const subs = liveSubs.filter((sub) => sub.parentId === category.id && matchesSub(sub, category)).sort((a, b) => a.order - b.order)
-            return (
-              <div key={category.id} className="taxonomy-group">
-                {matchesCategory(category) ? (
-                  <div className="taxonomy-option-row">
-                    <button id={`taxonomy-option-${category.id}`} type="button" role="option" aria-selected={selected === category.id} className={`opt${visibleTargets[activeIndex] === category.id ? " keyboard-active" : ""}`} onClick={() => setSelected(category.id)}>
-                      <span className="swatch" style={{ background: category.color }} />{category.emoji} {category.name}
-                    </button>
-                    <button type="button" className="btn btn-sm" aria-label={`Edit ${category.name}`} onClick={() => beginEdit(category)}>Edit</button>
-                  </div>
-                ) : <div className="taxonomy-parent-label">{category.emoji} {category.name}</div>}
-                {editingId === category.id ? <TaxonomyEditForm draft={draft} setDraft={setDraft} error={error} onSave={() => void saveEdit(category.id)} onCancel={() => { setEditingId(null); setError("") }} /> : null}
-                {subs.map((sub) => (
-                  <div key={sub.id}>
-                    <div className="taxonomy-option-row taxonomy-subrow">
-                      <button id={`taxonomy-option-${sub.id}`} type="button" role="option" aria-selected={selected === sub.id} className={`opt${visibleTargets[activeIndex] === sub.id ? " keyboard-active" : ""}`} onClick={() => setSelected(sub.id)}>
-                        <span className="swatch" style={{ background: sub.color ?? category.color }} />{sub.emoji} {category.name} › {sub.name}
-                      </button>
-                      <button type="button" className="btn btn-sm" aria-label={`Edit ${sub.name}`} onClick={() => beginEdit(sub)}>Edit</button>
-                    </div>
-                    {editingId === sub.id ? <TaxonomyEditForm draft={draft} setDraft={setDraft} error={error} onSave={() => void saveEdit(sub.id)} onCancel={() => { setEditingId(null); setError("") }} includeColor /> : null}
-                  </div>
-                ))}
-                {trimmedQuery ? (
-                  <div className="taxonomy-create-row taxonomy-subcreate">
-                    <button type="button" className="btn btn-sm" disabled={duplicateSubParents.has(category.id)} onClick={() => void createSubcategory(category)}>
-                      Create “{trimmedQuery}” under {category.name}
-                    </button>
-                    {duplicateSubParents.has(category.id) ? <span className="muted small">That subcategory already exists.</span> : null}
-                  </div>
-                ) : null}
-              </div>
-            )
-          })}
-          {live.length === 0 ? <div className="empty">No active categories. Create one above.</div> : null}
-        </div>
-        {error && !editingId ? <div role="alert" className="taxonomy-error">{error}</div> : null}
-        {channel ? (
-          <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "12px 0 0" }}>
-            <input
-              type="checkbox"
-              checked={alsoRule}
-              onChange={(e) => setAlsoRule(e.target.checked)}
-            />
-            <span className="small">
-              Also always categorize <b>{channel}</b> this way (channel rule)
-            </span>
-          </label>
-        ) : null}
-        <div className="row" style={{ marginTop: 14, justifyContent: "flex-end" }}>
-          {canClear ? (
-            <button
-              className="btn"
-              onClick={() => onChoose({ categoryId: null, alsoChannelRule: false })}
-            >
-              Clear override
-            </button>
-          ) : null}
-          <button className="btn" onClick={onClose}>
-            Cancel
+      />
+      <span id="taxonomy-search-hint" className="sr-only">Use the arrow keys to move through results and Enter to select. Type a new name to create a category.</span>
+      {trimmedQuery ? (
+        <div className="taxonomy-create-row">
+          <button type="button" className="btn btn-sm" disabled={duplicateCategory} onClick={() => void createCategory()}>
+            Create category “{trimmedQuery}”
           </button>
-          <button
-            className="btn btn-primary"
-            disabled={selected == null}
-            onClick={() => onChoose({ categoryId: selected, alsoChannelRule: alsoRule })}
-          >
-            Apply
-          </button>
+          {duplicateCategory ? <span className="muted small">That category already exists.</span> : null}
         </div>
+      ) : null}
+      {current && !selected ? <div className="taxonomy-notice">This category is archived. Pick an active one, or cancel to keep it.</div> : null}
+      <div id="taxonomy-options" role="listbox" aria-label="Available categories and subcategories" className="taxonomy-options">
+        {live.map((category) => {
+          const subs = liveSubs.filter((sub) => sub.parentId === category.id && matchesSub(sub, category)).sort((a, b) => a.order - b.order)
+          return (
+            <div key={category.id} className="taxonomy-group">
+              {matchesCategory(category) ? (
+                <div className="taxonomy-option-row">
+                  <button id={`taxonomy-option-${category.id}`} type="button" role="option" tabIndex={-1} aria-selected={selected === category.id} className={`opt${visibleTargets[activeIndex] === category.id ? " keyboard-active" : ""}`} onClick={() => setSelected(category.id)}>
+                    <span className="swatch" style={{ background: category.color }} />{category.emoji} {category.name}
+                  </button>
+                  <button type="button" className="btn btn-quiet btn-sm edit-btn" aria-label={`Edit ${category.name}`} onClick={() => beginEdit(category)}>Edit</button>
+                </div>
+              ) : <div className="taxonomy-parent-label">{category.emoji} {category.name}</div>}
+              {editForm(category.id)}
+              {subs.map((sub) => (
+                <div key={sub.id}>
+                  <div className="taxonomy-option-row taxonomy-subrow">
+                    <button id={`taxonomy-option-${sub.id}`} type="button" role="option" tabIndex={-1} aria-selected={selected === sub.id} className={`opt${visibleTargets[activeIndex] === sub.id ? " keyboard-active" : ""}`} onClick={() => setSelected(sub.id)}>
+                      <span className="swatch" style={{ background: sub.color ?? category.color }} />{sub.emoji} {category.name} › {sub.name}
+                    </button>
+                    <button type="button" className="btn btn-quiet btn-sm edit-btn" aria-label={`Edit ${sub.name}`} onClick={() => beginEdit(sub)}>Edit</button>
+                  </div>
+                  {editForm(sub.id)}
+                </div>
+              ))}
+              {trimmedQuery ? (
+                <div className="taxonomy-create-row taxonomy-subcreate">
+                  <button type="button" className="btn btn-link btn-sm" disabled={duplicateSubParents.has(category.id)} onClick={() => void createSubcategory(category)}>
+                    Create “{trimmedQuery}” under {category.name}
+                  </button>
+                  {duplicateSubParents.has(category.id) ? <span className="muted small">That subcategory already exists.</span> : null}
+                </div>
+              ) : null}
+            </div>
+          )
+        })}
+        {live.length === 0 ? <div className="empty">No active categories yet. Type a name above to create one.</div> : null}
       </div>
-    </div>
+      {categories.some((category) => category.archivedAt) || subcategories.some((sub) => sub.archivedAt)
+        ? <p className="muted small" style={{ margin: "8px 0 0" }}>Archived categories are hidden here. Videos already in them keep their category.</p>
+        : null}
+      {error && !editingId ? <div role="alert" className="taxonomy-error">{error}</div> : null}
+      {channel ? (
+        <label className="check" style={{ marginTop: 16 }}>
+          <input type="checkbox" checked={alsoRule} onChange={(e) => setAlsoRule(e.target.checked)} />
+          <span>Use this for every video from <b>{channel}</b></span>
+        </label>
+      ) : null}
+      <div className="menu-footer">
+        {canClear ? (
+          <button type="button" className="btn btn-quiet" onClick={() => onChoose({ categoryId: null, alsoChannelRule: false })}>
+            Reset to automatic
+          </button>
+        ) : null}
+        <button type="button" className="btn" onClick={onClose}>Cancel</button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={selected == null}
+          onClick={() => onChoose({ categoryId: selected, alsoChannelRule: alsoRule })}
+        >
+          Apply
+        </button>
+      </div>
+    </Dialog>
   )
 }
 
@@ -383,12 +418,15 @@ function TaxonomyEditForm({
   includeColor?: boolean
 }) {
   return (
-    <div className="taxonomy-edit" aria-label="Edit taxonomy item">
-      <label className="small">Name<input aria-label="Name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-      <label className="small">Emoji<input aria-label="Emoji" maxLength={4} value={draft.emoji} onChange={(event) => setDraft({ ...draft, emoji: event.target.value })} /></label>
-      {includeColor ? <label className="small">Color<input aria-label="Color" type="color" value={draft.color} onChange={(event) => setDraft({ ...draft, color: event.target.value })} /></label> : null}
-      {error ? <span role="alert" className="taxonomy-error">{error}</span> : null}
-      <div className="row"><button type="button" className="btn btn-sm btn-primary" onClick={onSave}>Save</button><button type="button" className="btn btn-sm" onClick={onCancel}>Cancel edit</button></div>
+    <div className="taxonomy-edit" role="group" aria-label="Edit details">
+      <label className="field">Name<input aria-label="Name" autoFocus value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+      <label className="field">Emoji<input aria-label="Emoji" maxLength={4} value={draft.emoji} onChange={(event) => setDraft({ ...draft, emoji: event.target.value })} /></label>
+      {includeColor ? <label className="field">Color<input aria-label="Color" type="color" value={draft.color} onChange={(event) => setDraft({ ...draft, color: event.target.value })} /></label> : null}
+      <div className="row" style={{ gap: 8 }}>
+        <button type="button" className="btn btn-sm btn-primary" onClick={onSave}>Save</button>
+        <button type="button" className="btn btn-sm btn-quiet" onClick={onCancel}>Cancel edit</button>
+      </div>
+      {error ? <span role="alert" className="taxonomy-error" style={{ width: "100%" }}>{error}</span> : null}
     </div>
   )
 }
@@ -400,13 +438,15 @@ export function RangeBar({
 }: {
   value: string
   onChange: (v: string) => void
-  options: Array<{ id: string; label: string }>
+  options: ReadonlyArray<{ id: string; label: string }>
 }) {
   return (
-    <div className="rangebar">
+    <div className="rangebar" role="group" aria-label="Date range">
       {options.map((o) => (
         <button
           key={o.id}
+          type="button"
+          aria-pressed={value === o.id}
           className={"btn btn-sm" + (value === o.id ? " active" : "")}
           onClick={() => onChange(o.id)}
         >
@@ -418,28 +458,29 @@ export function RangeBar({
 }
 
 /**
- * Accessible segmented control for the on-YouTube enforcement mode.
- *
- * Deliberately NOT a native <select>: QA automation and keyboard users both
- * failed to operate the previous dropdown reliably. These are real buttons in
- * a role="radiogroup" with aria-checked, roving tabindex and arrow keys, so
- * they can be clicked, tabbed to, and switched with Space/Enter.
+ * Accessible segmented control for the on-YouTube enforcement mode: real
+ * buttons in a radiogroup with roving tabindex and arrow keys (a native
+ * <select> proved unreliable for keyboard users and automation).
  */
 export const BUDGET_MODE_OPTIONS = [
-  { value: "off", label: "Off", hint: "track only" },
-  { value: "gentle", label: "Gentle", hint: "highlight" },
-  { value: "strict", label: "Strict", hint: "blur / hide" }
+  { value: "off", label: "Off", hint: "Just track", detail: "YouTube looks the same. Budgets only show up here." },
+  { value: "gentle", label: "Gentle", hint: "Flag videos", detail: "Over-budget videos get an outline and a label, and watch pages show a note you can dismiss." },
+  { value: "strict", label: "Strict", hint: "Hide videos", detail: "Over-budget thumbnails and titles are covered until you click them, and watch pages ask before playing." }
 ] as const
+
+export function budgetModeDetail(mode: BudgetMode): string {
+  return BUDGET_MODE_OPTIONS.find((o) => o.value === mode)?.detail ?? ""
+}
 
 export function BudgetModeControl({
   value,
   onChange,
   compact = false,
-  label = "Budget enforcement mode"
+  label = "What happens on YouTube"
 }: {
   value: BudgetMode
   onChange: (mode: BudgetMode) => void
-  /** hide the one-word hint under each label */
+  /** hide the short hint under each label */
   compact?: boolean
   label?: string
 }) {
@@ -447,14 +488,10 @@ export function BudgetModeControl({
   const index = BUDGET_MODE_OPTIONS.findIndex((o) => o.value === value)
 
   const choose = (delta: number) => {
-    const next =
-      (index + delta + BUDGET_MODE_OPTIONS.length) % BUDGET_MODE_OPTIONS.length
+    const next = (index + delta + BUDGET_MODE_OPTIONS.length) % BUDGET_MODE_OPTIONS.length
     const mode = BUDGET_MODE_OPTIONS[next].value
     onChange(mode)
-    const el = groupRef.current?.querySelector<HTMLButtonElement>(
-      `[data-mode="${mode}"]`
-    )
-    el?.focus()
+    groupRef.current?.querySelector<HTMLButtonElement>(`[data-mode="${mode}"]`)?.focus()
   }
 
   return (
@@ -465,15 +502,8 @@ export function BudgetModeControl({
       aria-label={label}
       data-testid="budget-mode-control"
       onKeyDown={(e) => {
-        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-          e.preventDefault()
-          choose(1)
-        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-          e.preventDefault()
-          choose(-1)
-        } else if (e.key === " " || e.key === "Enter") {
-          // Let the focused button's click handler run.
-        }
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); choose(1) }
+        else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); choose(-1) }
       }}
     >
       {BUDGET_MODE_OPTIONS.map((o) => {
@@ -484,19 +514,14 @@ export function BudgetModeControl({
             type="button"
             role="radio"
             aria-checked={active}
-            aria-label={`${o.label} — ${o.hint}`}
+            aria-label={`${o.label}: ${o.hint}`}
             data-mode={o.value}
             tabIndex={active ? 0 : -1}
             className={"segment" + (active ? " active" : "")}
             onClick={() => onChange(o.value)}
           >
-            <span className="segment-mark" aria-hidden="true">
-              {active ? "●" : "○"}
-            </span>
-            <span className="segment-body">
-              <span className="segment-label">{o.label}</span>
-              {compact ? null : <span className="segment-hint">{o.hint}</span>}
-            </span>
+            <span className="segment-label">{o.label}</span>
+            {compact ? null : <span className="segment-hint">{o.hint}</span>}
           </button>
         )
       })}
