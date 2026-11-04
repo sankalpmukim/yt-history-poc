@@ -1,7 +1,7 @@
 {
   "name": "yt-ledger",
   "displayName": "YT Ledger",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "An expense manager for your YouTube watch history — categorize what you watch, see where the time goes, budget it. Local-only.",
   "private": true,
   "scripts": {
