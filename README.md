@@ -53,6 +53,11 @@ Both browsers let you switch off an extension's access to a site after installin
 
 ## Install
 
+### From a store (easiest)
+
+- **Chrome / Brave / Edge**: [YT Ledger on the Chrome Web Store](https://chromewebstore.google.com/detail/ebijfodalkiphkomfjnonjpdfjdfihfo)
+- **Firefox (128 or later)**: [YT Ledger on Firefox Add-ons](https://addons.mozilla.org/addon/yt-ledger/)
+
 ### From a release: Chrome, Brave, Edge
 
 1. Download `yt-ledger-v<version>.zip` from the [latest release](https://github.com/sankalpmukim/yt-history-poc/releases/latest) and unzip it.
@@ -68,7 +73,7 @@ Both browsers let you switch off an extension's access to a site after installin
 
 Regular Firefox only keeps add-ons that Mozilla has signed, so a temporary add-on is removed when Firefox restarts. To keep it installed, use Firefox Developer Edition, Nightly or ESR with `xpinstall.signatures.required` set to `false` in `about:config` and install the zip from `about:addons` → ⚙ → **Install Add-on From File…** (rename it to `.xpi` if the file picker greys it out).
 
-YT Ledger isn't published to any extension store.
+The store listings are the recommended install path; the manual steps below always work too.
 
 ### From source
 
