@@ -51,9 +51,34 @@ async function call(method, path, { json, form } = {}) {
   let data
   try { data = JSON.parse(text) } catch { data = text }
   if (!res.ok) {
-    throw new Error(`${method} ${path} → ${res.status}: ${typeof data === "string" ? data.slice(0, 800) : JSON.stringify(data).slice(0, 800)}`)
+    const err = new Error(`${method} ${path} → ${res.status}: ${typeof data === "string" ? data.slice(0, 800) : JSON.stringify(data).slice(0, 800)}`)
+    err.status = res.status
+    err.data = data
+    throw err
   }
   return data
+}
+
+/**
+ * Run a call, waiting out AMO's per-account throttle if we hit it. The
+ * submission endpoints have a small daily quota; a 429 tells us exactly
+ * when a slot frees up.
+ */
+async function callWithThrottleWait(method, path, opts, maxWaitMs = 12 * 3600_000) {
+  const deadline = Date.now() + maxWaitMs
+  for (;;) {
+    try {
+      return await call(method, path, opts)
+    } catch (e) {
+      const waitMatch = e.status === 429 && typeof e.data?.detail === "string"
+        ? e.data.detail.match(/available in (\d+) seconds/i)
+        : null
+      if (!waitMatch || Date.now() + (Number(waitMatch[1]) + 30) * 1000 > deadline) throw e
+      const waitSec = Math.min(Number(waitMatch[1]) + 30, 3500)
+      console.log(`throttled; waiting ${Math.round(waitSec / 60)} min for the quota window…`)
+      await new Promise((r) => setTimeout(r, waitSec * 1000))
+    }
+  }
 }
 
 const SUMMARY =
@@ -91,7 +116,7 @@ if (!processed.valid) {
 }
 
 // 3. create the add-on (first submission) or add a version (existing)
-const slug = "yt-ledger"
+let slug = "yt-ledger"
 let addon
 try {
   addon = await call("GET", `/addons/addon/${slug}/`)
@@ -99,7 +124,7 @@ try {
   addon = null
 }
 if (!addon) {
-  addon = await call("POST", "/addons/addon/", {
+  addon = await callWithThrottleWait("POST", "/addons/addon/", {
     json: {
       categories: { firefox: ["photos-music-videos"] },
       summary: { "en-US": SUMMARY },
@@ -108,16 +133,18 @@ if (!addon) {
       version: { upload: upload.uuid, license: "MIT" }
     }
   })
+  slug = addon.slug
   console.log("created add-on", addon.slug, addon.id, "status:", addon.status)
 } else {
-  const version = await call("POST", `/addons/addon/${slug}/versions/`, {
+  slug = addon.slug
+  const version = await callWithThrottleWait("POST", `/addons/addon/${slug}/versions/`, {
     json: { upload: upload.uuid }
   })
   console.log("new version", version.version, version.id)
 }
 
 // 4. polish listing metadata (idempotent)
-const patched = await call("PATCH", `/addons/addon/${slug}/`, {
+const patched = await callWithThrottleWait("PATCH", `/addons/addon/${slug}/`, {
   json: {
     summary: { "en-US": SUMMARY },
     description: { "en-US": DESCRIPTION },
@@ -135,7 +162,7 @@ if (sourcePath && existsSync(sourcePath)) {
     const srcForm = new FormData()
     srcForm.append("source", new Blob([readFileSync(sourcePath)], { type: "application/zip" }), sourcePath.split("/").pop())
     srcForm.append("license", "MIT")
-    const v = await call("PATCH", `/addons/addon/${slug}/versions/${versionId}/`, { form: srcForm })
+    const v = await callWithThrottleWait("PATCH", `/addons/addon/${slug}/versions/${versionId}/`, { form: srcForm })
     console.log("source attached to version", v.version)
   }
 }
