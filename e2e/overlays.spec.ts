@@ -9,12 +9,18 @@ async function acceptYouTubeConsent(page: import("@playwright/test").Page) {
   await page.waitForURL(/youtube\.com/, { timeout: 30_000 }).catch(() => {})
 }
 
-async function setMode(ledger: import("./fixtures").LedgerSession, mode: "off" | "gentle" | "strict") {
-  await ledger.page.evaluate(async (budgetMode) => {
-    const bag = await chrome.storage.local.get("yl.v2.meta")
-    const meta = bag["yl.v2.meta"] as { settings: Record<string, unknown> }
-    await chrome.storage.local.set({ "yl.v2.meta": { ...meta, settings: { ...meta.settings, budgetMode } } })
-  }, mode)
+/**
+ * On a first visit YouTube can reload itself (e.g. to apply the dark theme
+ * from prefers-color-scheme), which aborts a reload started at the same time.
+ */
+async function reloadYouTube(page: import("@playwright/test").Page) {
+  await page.waitForLoadState("load").catch(() => {})
+  try {
+    await page.reload({ waitUntil: "domcontentloaded" })
+  } catch {
+    await page.waitForLoadState("load").catch(() => {})
+    await page.reload({ waitUntil: "domcontentloaded" })
+  }
 }
 
 test("Live Gentle/Strict/Off overlays on Search and watch page", async ({ ledger }, testInfo) => {
@@ -25,12 +31,13 @@ test("Live Gentle/Strict/Off overlays on Search and watch page", async ({ ledger
   const screenshotDir = "qa/e2e/overlays"
   mkdirSync(screenshotDir, { recursive: true })
   const theme = String(testInfo.project.use.colorScheme ?? "light")
-  const capture = (name: string) => youtube.screenshot({ path: join(screenshotDir, `${name}-${theme}.png`) })
+  const prefix = ledger.engine === "firefox" ? "firefox-" : ""
+  const capture = (name: string) => youtube.screenshot({ path: join(screenshotDir, `${prefix}${name}-${theme}.png`) })
   await youtube.goto("https://www.youtube.com/results?search_query=news", { waitUntil: "domcontentloaded" })
   await acceptYouTubeConsent(youtube)
 
-  await setMode(ledger, "gentle")
-  await youtube.reload({ waitUntil: "domcontentloaded" })
+  await ledger.setBudgetMode("gentle")
+  await reloadYouTube(youtube)
   const gentleCard = youtube.locator("[data-yl-budget]").first()
   await expect(gentleCard).toHaveAttribute("data-yl-budget", /gentle/ , { timeout: 60_000 })
   await expect(gentleCard).toHaveClass(/yl-budget-guard-gentle/)
@@ -49,7 +56,7 @@ test("Live Gentle/Strict/Off overlays on Search and watch page", async ({ ledger
   await gentleBanner.getByRole("button", { name: "Dismiss" }).click()
   await expect(gentleBanner).toHaveCount(0)
 
-  await setMode(ledger, "strict")
+  await ledger.setBudgetMode("strict")
   await youtube.goto("https://www.youtube.com/results?search_query=news", { waitUntil: "domcontentloaded" })
   await acceptYouTubeConsent(youtube)
   const strictCard = youtube.locator("[data-yl-budget]").first()
@@ -69,13 +76,19 @@ test("Live Gentle/Strict/Off overlays on Search and watch page", async ({ ledger
   await expect(strictInterstitial).toContainText("Over budget", { timeout: 60_000 })
   await expect(strictInterstitial).toContainText(/\d+ min over budget/)
   await capture("04-strict-watch")
+  // the gate holds the player: nothing plays (or is heard) behind it, even
+  // after YouTube's autoplay kicks in
+  const allPaused = () => youtube.evaluate(() => Array.from(document.querySelectorAll<HTMLVideoElement>("#movie_player video")).every((v) => v.paused))
+  await expect.poll(allPaused).toBe(true)
+  await youtube.waitForTimeout(2_000)
+  expect(await allPaused()).toBe(true)
   await strictInterstitial.getByRole("button", { name: "Watch anyway" }).click()
   await expect(strictInterstitial).toHaveCount(0)
 
-  await setMode(ledger, "off")
-  await youtube.reload({ waitUntil: "domcontentloaded" })
+  await ledger.setBudgetMode("off")
+  await reloadYouTube(youtube)
   await expect(youtube.locator(".yl-budget-guard")).toHaveCount(0, { timeout: 60_000 })
   await expect(youtube.locator("[data-yl-budget]")).toHaveCount(0)
   await capture("05-off")
-  await page.bringToFront()
+  await page.bringToFront().catch(() => {})
 })

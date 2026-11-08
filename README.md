@@ -13,7 +13,7 @@
 
 Expense trackers work because they make spending visible: every transaction lands in a category, and the totals tell you something you didn't want to hear. YT Ledger does the same for YouTube. Each video in your watch history becomes a ledger entry, and each category sits on a value ladder from *brain rot* (0) to *courses & lectures* (5). It's not about watching less. It's about knowing what the time actually went to.
 
-YT Ledger is a Chromium browser extension (Manifest V3, built with [Plasmo](https://www.plasmo.com/)). Everything stays in your browser.
+YT Ledger is a browser extension for Chrome and other Chromium browsers, and for Firefox (Manifest V3, built with [Plasmo](https://www.plasmo.com/)). Everything stays in your browser.
 
 ## Features
 
@@ -49,14 +49,24 @@ Permissions requested in the manifest:
 | `scripting` | Register the page-context script that reads YouTube's own history data. |
 | Host access: `*://*.youtube.com/*` | Read your watch history, look up video durations, and show budget overlays. |
 
+Both browsers let you switch off an extension's access to a site after installing it. If YouTube access is off, nothing syncs and no overlays appear, so the dashboard shows an **Allow YouTube access** button. On Firefox the add-on also declares that it collects no data.
+
 ## Install
 
-### From a release
+### From a release: Chrome, Brave, Edge
 
-1. Download `yt-ledger-v<version>-chrome-mv3.zip` from the [latest release](https://github.com/sankalpmukim/yt-history-poc/releases/latest) and unzip it.
+1. Download `yt-ledger-v<version>.zip` from the [latest release](https://github.com/sankalpmukim/yt-history-poc/releases/latest) and unzip it.
 2. Open `chrome://extensions` (or `brave://extensions`, `edge://extensions`) and enable **Developer mode**.
 3. Click **Load unpacked** and select the unzipped folder.
 4. Click the YT Ledger toolbar icon to open the dashboard, then visit YouTube once while signed in to run the first sync.
+
+### From a release: Firefox (128 or later)
+
+1. Download `yt-ledger-v<version>-firefox.zip` from the [latest release](https://github.com/sankalpmukim/yt-history-poc/releases/latest).
+2. Open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and pick the zip (or the `manifest.json` inside it once unzipped).
+3. Click the YT Ledger toolbar icon to open the dashboard, then visit YouTube once while signed in to run the first sync.
+
+Regular Firefox only keeps add-ons that Mozilla has signed, so a temporary add-on is removed when Firefox restarts. To keep it installed, use Firefox Developer Edition, Nightly or ESR with `xpinstall.signatures.required` set to `false` in `about:config` and install the zip from `about:addons` → ⚙ → **Install Add-on From File…** (rename it to `.xpi` if the file picker greys it out).
 
 YT Ledger isn't published to any extension store.
 
@@ -69,23 +79,28 @@ git clone https://github.com/sankalpmukim/yt-history-poc.git
 cd yt-history-poc
 pnpm install
 pnpm build          # → build/chrome-mv3-prod (load this folder unpacked)
+pnpm build:firefox  # → build/firefox-mv3-prod (load its manifest.json in about:debugging)
 ```
 
 ## Development
 
 ```sh
 pnpm dev            # development build with live reload → build/chrome-mv3-dev
+pnpm dev:firefox    # same for Firefox → build/firefox-mv3-dev
 pnpm build          # production build → build/chrome-mv3-prod
+pnpm build:firefox  # production build → build/firefox-mv3-prod
 pnpm package        # production zip → build/chrome-mv3-prod.zip
+pnpm package:firefox  # production zip → build/firefox-mv3-prod.zip
 pnpm test           # unit tests (node:test)
-pnpm e2e            # Playwright end-to-end tests in a throwaway Chromium profile
+pnpm e2e            # Playwright end-to-end tests: throwaway Chromium profile, plus Firefox if installed
+pnpm e2e:firefox    # only the Firefox projects
 pnpm qa:seed        # regenerate the test fixtures in fixtures/
 ```
 
 Project layout:
 
 ```
-background.ts        service worker: single writer for storage, sync coordinator, duration resolver
+background.ts        background (service worker in Chrome, event page in Firefox): single writer for storage, sync coordinator, duration resolver
 contents/            content scripts on youtube.com
   history-sync.ts      isolated-world script: talks to the page script, forwards results
   history-main.ts      page-context script: reads your history page's own data
@@ -110,7 +125,7 @@ YouTube has no public API for watch history, so YT Ledger reads it the same way 
 
 ## Limitations
 
-- **Chromium only.** Tested in Brave; should work in Chrome, Edge and other Chromium browsers. Firefox and Safari aren't supported.
+- **Chrome/Chromium and Firefox 128+.** Tested in Brave, Chromium and Firefox; should work in Chrome, Edge and other Chromium browsers. Safari isn't supported.
 - **Depends on YouTube's page structure.** The history data format is undocumented and changes over time. The parser is defensive, but a YouTube change can break syncing until the parser is updated.
 - **Estimates, not exact time.** Watch time comes from duration × progress, and history is only day-granular.
 - **Watch history must be on.** If YouTube watch history is paused for your account, there's nothing to read.

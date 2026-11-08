@@ -141,6 +141,21 @@ function closeHiddenTab(reason: string): void {
   ping("hidden-tab", `closed reason=${reason}`)
 }
 
+/**
+ * The hidden sync tab, surviving a background restart: Chrome's service
+ * worker and Firefox's event page are both suspended after ~30s idle, and a
+ * long auto-scroll can outlast that, so fall back to the persisted id.
+ */
+async function currentHiddenTabId(): Promise<number | null> {
+  if (hiddenTabId != null) return hiddenTabId
+  try {
+    const st = (await kv.get(KEYS.syncState)) as { hiddenTabId?: number } | undefined
+    return typeof st?.hiddenTabId === "number" ? st.hiddenTabId : null
+  } catch {
+    return null
+  }
+}
+
 /** Close a hidden tab left over from a previous service-worker lifetime. */
 async function cleanupSyncState(): Promise<void> {
   try {
@@ -320,9 +335,14 @@ chrome.runtime.onMessage.addListener((msg: any, sender, sendResponse) => {
   }
 
   if (msg?.type === "yl.hiddenTabDone") {
-    if (tabId != null && tabId === hiddenTabId) closeHiddenTab("done")
-    sendResponse({ ok: true })
-    return false
+    ;(async () => {
+      if (tabId != null && tabId === (await currentHiddenTabId())) {
+        hiddenTabId = tabId
+        closeHiddenTab("done")
+      }
+      sendResponse({ ok: true })
+    })()
+    return true
   }
 
   if (msg?.type === "yl.refreshBudget") {

@@ -2,18 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-YT Ledger is a Chromium Manifest V3 extension, built with Plasmo, React 18 and pnpm. It works as an expense manager for YouTube watch time: every watched video becomes a ledger entry, entries get categories on a value ladder, and weekly budgets can be enforced on youtube.com. Everything is local-only, with no server.
+YT Ledger is a Manifest V3 extension for Chromium browsers and Firefox (128+), built with Plasmo, React 18 and pnpm. Both browsers must stay fully supported: any change ships to both builds. It works as an expense manager for YouTube watch time: every watched video becomes a ledger entry, entries get categories on a value ladder, and weekly budgets can be enforced on youtube.com. Everything is local-only, with no server.
 
 ## Commands
 
 ```sh
 pnpm install
 pnpm dev            # dev build with live reload → build/chrome-mv3-dev (load unpacked)
+pnpm dev:firefox    # same → build/firefox-mv3-dev (about:debugging → Load Temporary Add-on → manifest.json)
 pnpm build          # production build → build/chrome-mv3-prod
+pnpm build:firefox  # production build → build/firefox-mv3-prod
+pnpm build:all      # both production builds
 pnpm package        # zips the EXISTING build/chrome-mv3-prod; run `pnpm build` first or you ship a stale version
+pnpm package:firefox  # zips the EXISTING build/firefox-mv3-prod; same caveat
 pnpm test           # unit tests: esbuild bundles core/*.test.ts + utils/*.test.ts into .test/, then node --test
-pnpm e2e            # installs Playwright Chromium, runs pnpm build, then all Playwright specs
+pnpm e2e            # installs Playwright Chromium, runs pnpm build:all, then all Playwright specs (Chromium + Firefox)
 pnpm e2e:headed     # same, headed
+pnpm e2e:firefox    # pnpm build:firefox, then only the firefox* projects
 pnpm qa:seed        # regenerate fixtures/qa-seed.json and fixtures/qa-seed-live.json (events dated in the current week)
 ```
 
@@ -31,8 +36,17 @@ To filter by test name, add `--test-name-pattern "<name>"` to `node --test`.
 pnpm build && pnpm exec playwright test e2e/rules.spec.ts
 ```
 
-- `--project dashboard` runs only the dashboard specs.
+- `--project dashboard` runs only the Chromium dashboard specs (plus `extension.spec.ts`).
 - `overlays.spec.ts` runs in the `overlays-light` and `overlays-dark` projects against **live, logged-out youtube.com**, so it needs network access.
+- Firefox projects (`firefox`, `firefox-overlays-light`, `firefox-overlays-dark`) load `build/firefox-mv3-prod` into the installed `/Applications/Firefox.app`; they skip if it's missing. `hidden-tab-sync.spec.ts` is Firefox-only and also needs live youtube.com.
+
+**Firefox e2e harness** (`e2e/fixtures.ts`, `e2e/firefox-rdp.ts`; details in `qa/README.md`):
+- Playwright drives stock Firefox over WebDriver BiDi (`channel: "moz-firefox"`). The add-on is installed as a temporary add-on over Firefox's remote debugging protocol (RDP). The UUID is fixed via `extensions.webextensions.uuids`, and `MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1` lets BiDi navigate to `moz-extension://`.
+- BiDi can't evaluate in, query or screenshot extension pages. Use `ledger.evaluate(fn, arg)` and `waitForExtension(...)`, which go over RDP in Firefox and `page.evaluate` in Chromium. Functions are serialized, so they can't close over variables; pass data through `arg`.
+- The UI-heavy dashboard specs therefore stay Chromium-only. Put cross-browser behaviour in `extension.spec.ts`.
+- Playwright can't route the first navigation of a tab the extension opens itself, in either browser.
+- When registering `context.route`, the most recently added route wins, so register catch-alls first.
+- Both browsers launch muted (`--mute-audio`, `media.volume_scale`). Keep it that way: live specs autoplay YouTube.
 
 **Typecheck.** There's no lint or typecheck script, and Plasmo's build doesn't typecheck. `tsconfig.json` extends `plasmo/tsconfig`, which doesn't resolve, so `tsc -p tsconfig.json` fails. To typecheck, use a temporary config that extends `./node_modules/plasmo/templates/tsconfig.base.json`. A few type errors already exist in `background.ts`, `contents/history-sync.ts` and `core/assign.ts`.
 
@@ -59,6 +73,14 @@ This serves the prod build with a mocked `chrome.storage` seeded from `fixtures/
    - queues missing durations for `core/resolve.ts`, which fetches public watch pages
 5. The worker recomputes a budget-status snapshot (`yl.v2.budgetStatus`). This happens debounced on storage changes, or immediately on `yl.refreshBudget`.
 6. `contents/budget-guard.ts` reads that snapshot plus the rules. It classifies feed cards and watch pages with `core/classify.ts` and applies Gentle or Strict overlays. It **fails open**: unknown or uncategorized videos are never touched.
+
+**Firefox.**
+- Plasmo's `--target=firefox-mv3` turns the service worker into `background.scripts` (an event page). `package.json` `manifest.browser_specific_settings.gecko` holds the add-on ID, `strict_min_version` and `data_collection_permissions`; Plasmo strips it from Chrome builds.
+- Firefox exposes the promise-returning `chrome.*` namespace in MV3, so code uses `chrome.*` everywhere. Don't add a polyfill.
+- Both backgrounds are suspended after about 30s idle, so don't rely on in-memory state surviving between messages. Persist it, as `currentHiddenTabId()` does with `yl.v2.syncState`.
+- Users can revoke host access, which Firefox treats as optional in MV3. `tabs/lib/access.tsx` shows a notice with an "Allow YouTube access" button. `permissions.request` must be called synchronously in the click handler.
+- Real Firefox plays YouTube video and inline previews, which Playwright's Chromium can't. The overlay specs in Firefox are what catch problems with playback behind overlays.
+- Check the Firefox build with `npx web-ext lint -s build/firefox-mv3-prod`. The only expected warnings are React-DOM's `innerHTML`.
 
 **Storage.** All data lives in `chrome.storage.local` under `yl.v2.*` keys (`core/types.ts` `KEYS`).
 - Events are sharded by month as `yl.v2.events.YYYY-MM`, so a sync rewrites only the shards it touched.
@@ -107,6 +129,7 @@ All CSS is one template string in `tabs/lib/styles.ts`. There's no CSS framework
 **Dialogs.** Use the shared `Dialog` component. It portals, traps focus, handles Escape for the topmost dialog only, and restores focus, falling back to `#main`.
 
 **Overlays.** On YouTube, the overlays follow YouTube's own theme (`html[dark]`), not the OS theme. Build their DOM with `textContent`, never `innerHTML`.
+- Strict mode must also stop playback. Hover events over a veil are stopped before YouTube's listeners run. A hover preview (`#video-preview`) that sits on a veil is hidden and paused, by geometry. The watch-page interstitial keeps the `#movie_player` video paused until "Watch anyway" is clicked.
 
 ## Tests pin UI copy
 
@@ -124,6 +147,6 @@ The e2e specs assert on exact visible text and accessible names: button labels, 
   1. Commit the work.
   2. Make a `release: vX.Y.Z` commit that bumps both version files.
   3. Create an annotated tag `vX.Y.Z` and push `main` plus the tag.
-  4. Run `pnpm build && pnpm package`.
-  5. Run `gh release create vX.Y.Z yt-ledger-vX.Y.Z.zip --title "YT Ledger vX.Y.Z"`. The notes end with "Install: unzip and Load unpacked in chrome://extensions."
+  4. Run `pnpm build:all && pnpm package && pnpm package:firefox`. Copy `build/chrome-mv3-prod.zip` to `yt-ledger-vX.Y.Z.zip` and `build/firefox-mv3-prod.zip` to `yt-ledger-vX.Y.Z-firefox.zip`.
+  5. Run `gh release create vX.Y.Z yt-ledger-vX.Y.Z.zip yt-ledger-vX.Y.Z-firefox.zip --title "YT Ledger vX.Y.Z"`. The notes end with "Install: Chrome: unzip and Load unpacked in chrome://extensions. Firefox: about:debugging → Load Temporary Add-on → pick the -firefox.zip."
 - Development-only code (the dev relay to `127.0.0.1:8742`) is gated on `process.env.NODE_ENV !== "production"`, so production builds ship no localhost host permission.

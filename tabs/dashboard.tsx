@@ -16,6 +16,7 @@ import { OnboardingView } from "./views/onboarding"
 import { BudgetsView } from "./views/budgets"
 import { uncategorizedVideos } from "../core/aggregate"
 import { relativeTime } from "./lib/ui"
+import { YouTubeAccessNotice } from "./lib/access"
 
 interface RouteDef {
   id: string
@@ -85,6 +86,7 @@ export default function Dashboard() {
     return (
       <>
         <style>{CSS}</style>
+        <div className="access-notice-wrap"><YouTubeAccessNotice /></div>
         <OnboardingView
           data={data}
           reload={reload}
@@ -136,6 +138,7 @@ export default function Dashboard() {
           </div>
         </aside>
         <main className="main" id="main" tabIndex={-1}>
+          <YouTubeAccessNotice />
           <active.el data={data} reload={reload} />
         </main>
       </div>

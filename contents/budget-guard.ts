@@ -278,6 +278,8 @@ html[dark] .${R}-veil:focus-visible { outline-color: #9db3f0; }
 .${R}-veil-copy { display: flex; flex-direction: column; gap: 4px; }
 .${R}-veil-action { font-size: 13px; font-weight: 500; color: var(--yl-pencil); }
 .${R}-veil:hover .${R}-veil-action { text-decoration: underline; text-underline-offset: 3px; }
+/* a hover preview that started before the veil existed must not cover it */
+html.${R}-veil-hover #video-preview { visibility: hidden !important; pointer-events: none !important; }
 .${R}-banner, .${R}-interstitial {
   position: fixed; z-index: 2147483646; left: 50%; transform: translateX(-50%);
   background: var(--yl-paper); border: 1px solid var(--yl-rule); border-left: 3px double var(--yl-red);
@@ -307,6 +309,7 @@ html[dark] .${R}-banner button:focus-visible, html[dark] .${R}-interstitial butt
 
 function stripAll(): void {
   for (const n of document.querySelectorAll("." + ROOT_CLASS)) n.remove()
+  releasePlayer?.()
   for (const n of document.querySelectorAll("[data-yl-budget]")) {
     setLinksFocusable(n, true)
     n.removeAttribute("data-yl-budget")
@@ -448,6 +451,34 @@ function scanFeed(): void {
 
 function removeWatchUi(): void {
   document.getElementById("yl-budget-watch-ui")?.remove()
+  releasePlayer?.()
+}
+
+/* Strict interstitial: the video must not play (with sound) behind the gate. */
+let releasePlayer: (() => void) | null = null
+
+function mainPlayerVideos(): HTMLVideoElement[] {
+  return Array.from(document.querySelectorAll<HTMLVideoElement>("#movie_player video"))
+}
+
+/** Keep the main player paused while the interstitial is up (YouTube autoplays). */
+function holdPlayer(): void {
+  if (releasePlayer) return
+  const onPlay = (e: Event) => {
+    if (!document.getElementById("yl-budget-watch-ui")) {
+      releasePlayer?.()
+      return
+    }
+    const v = e.target
+    if (v instanceof HTMLVideoElement && v.closest("#movie_player")) v.pause()
+  }
+  // "play" doesn't bubble, but it does go through the capture phase
+  document.addEventListener("play", onPlay, true)
+  releasePlayer = () => {
+    document.removeEventListener("play", onPlay, true)
+    releasePlayer = null
+  }
+  for (const v of mainPlayerVideos()) v.pause()
 }
 
 function overText(categoryId: string): HTMLElement {
@@ -486,6 +517,11 @@ function showWatchUi(videoId: string, categoryId: string): void {
   const dismiss = () => {
     state.watchDismissed.add(videoId)
     wrap.remove()
+    if (releasePlayer) {
+      releasePlayer()
+      // "Watch anyway" picks up where autoplay would have
+      for (const v of mainPlayerVideos()) void v.play().catch(() => {})
+    }
   }
   if (state.mode === "gentle") {
     wrap.classList.add(ROOT_CLASS + "-banner")
@@ -515,6 +551,7 @@ function showWatchUi(videoId: string, categoryId: string): void {
   actions.append(back, watchButton("Watch anyway", dismiss))
   wrap.append(title, text, actions)
   document.documentElement.appendChild(wrap)
+  holdPlayer()
   back.focus()
 }
 
@@ -553,14 +590,88 @@ function scan(): void {
     if (state.mode === "off" || state.over.size === 0) {
       stripAll()
       removeWatchUi()
+      syncPreviewCover()
       return
     }
     ensureStyle()
     scanFeed()
     scanWatch()
+    // veils come and go under a resting pointer
+    syncPreviewCover()
   } catch (e) {
     failOpen(e)
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* hover previews                                                      */
+/* ------------------------------------------------------------------ */
+
+const HOVER_EVENTS = ["mouseover", "mouseenter", "mousemove", "pointerover", "pointerenter", "pointermove"]
+const VEIL_HOVER_CLASS = `${ROOT_CLASS}-veil-hover`
+let hoverGuardInstalled = false
+let pointer: { x: number; y: number } | null = null
+let pointerFrame: number | null = null
+
+function veilUnder(x: number, y: number): boolean {
+  for (const veil of document.querySelectorAll(`.${ROOT_CLASS}-veil`)) {
+    const r = veil.getBoundingClientRect()
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true
+  }
+  return false
+}
+
+/** A preview that started under a resting pointer, before its card was veiled. */
+function previewOverVeil(): boolean {
+  const player = document.querySelector("#video-preview video")
+  if (!player) return false
+  const r = player.getBoundingClientRect()
+  return r.width > 0 && r.height > 0 && veilUnder(r.left + r.width / 2, r.top + r.height / 2)
+}
+
+/**
+ * Hide (and pause) YouTube's inline preview while it would sit on a veil.
+ * Geometry, not hit-testing: once the preview covers the veil it is the
+ * element under the pointer.
+ */
+function syncPreviewCover(): void {
+  const covered =
+    state.mode === "strict" &&
+    ((pointer != null && veilUnder(pointer.x, pointer.y)) || previewOverVeil())
+  const root = document.documentElement
+  if (root.classList.contains(VEIL_HOVER_CLASS) === covered) return
+  root.classList.toggle(VEIL_HOVER_CLASS, covered)
+  if (covered) {
+    try {
+      document.querySelector<HTMLVideoElement>("#video-preview video")?.pause()
+    } catch {}
+  }
+}
+
+/**
+ * YouTube starts an inline preview (#video-preview) when the pointer rests
+ * on a thumbnail. Over a Strict veil that plays the hidden video on top of
+ * the veil and swallows its "Click to reveal" click. Stop hover events over
+ * a veil before they reach YouTube's listeners (clicks are untouched), and
+ * keep any preview that started before the veil appeared off it.
+ */
+function installHoverPreviewGuard(): void {
+  if (hoverGuardInstalled) return
+  hoverGuardInstalled = true
+  const guard = (e: Event) => {
+    try {
+      const m = e as MouseEvent
+      pointer = { x: m.clientX, y: m.clientY }
+      if (pointerFrame == null) {
+        pointerFrame = requestAnimationFrame(() => {
+          pointerFrame = null
+          syncPreviewCover()
+        })
+      }
+      if (state.mode === "strict" && veilUnder(m.clientX, m.clientY)) e.stopImmediatePropagation()
+    } catch {}
+  }
+  for (const type of HOVER_EVENTS) window.addEventListener(type, guard, { capture: true })
 }
 
 function scheduleScan(): void {
@@ -595,6 +706,7 @@ async function boot(): Promise<void> {
       stopObserver()
       return
     }
+    if (state.mode === "strict") installHoverPreviewGuard()
     startObserver()
     scan()
   } catch (e) {

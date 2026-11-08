@@ -190,6 +190,7 @@ input[type="checkbox"] { accent-color: var(--ink); width: 16px; height: 16px; ma
 input[type="color"] { width: 32px; height: 32px; padding: 0; border: 1px solid var(--rule-strong); border-radius: var(--radius); background: transparent; cursor: pointer; }
 input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
 input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 2px; }
+input[type="color"]::-moz-color-swatch { border: 0; border-radius: 2px; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: var(--pencil); min-width: 0; }
 .field > input, .field > select, .field > button { font-size: 14px; }
 .field-hint { font-weight: 400; }
@@ -416,6 +417,13 @@ table.ledger tfoot .amount { font-weight: 600; }
 .taxonomy-create-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .taxonomy-subcreate { padding-left: 24px; margin: 0 0 4px; }
 .taxonomy-notice, .taxonomy-error { display: block; margin-top: 8px; color: var(--amber); font-size: 12px; font-weight: 500; }
+.access-notice { margin: 0 0 32px; padding: 12px 16px; max-width: 48em; background: var(--paper-raised); border: 1px solid var(--rule); border-left: 4px solid var(--amber); border-radius: var(--radius); }
+.access-notice-title { margin: 0 0 4px; font-weight: 600; color: var(--ink); }
+.access-notice-body { margin: 0 0 12px; color: var(--pencil); line-height: 1.5; }
+.access-notice-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.access-notice-hint { color: var(--pencil); font-size: 12px; }
+.access-notice-wrap:not(:empty) { padding: 32px 48px 0; }
+.access-notice-wrap .access-notice { margin: 0 auto; }
 .taxonomy-error { color: var(--red); }
 .taxonomy-edit { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px 24px; padding: 12px; background: var(--paper-sunken); border-radius: var(--radius); }
 .taxonomy-edit .field:first-child { flex: 1 1 160px; }
