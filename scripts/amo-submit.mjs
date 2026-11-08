@@ -37,7 +37,8 @@ function mintJwt() {
 }
 
 async function call(method, path, { json, form } = {}) {
-  const headers = { Authorization: mintJwt() }
+  // AMO's DRF JSONWebTokenAuthentication expects the "JWT <token>" scheme
+  const headers = { Authorization: `JWT ${mintJwt()}` }
   let body
   if (json != null) {
     headers["Content-Type"] = "application/json"
