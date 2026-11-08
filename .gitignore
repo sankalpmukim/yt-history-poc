@@ -6,3 +6,5 @@ dist/
 *.log
 .DS_Store
 *.tsbuildinfo
+yt-ledger-v*.zip
+store-assets/yt-ledger-v*-source.zip
