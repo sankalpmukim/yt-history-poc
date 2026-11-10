@@ -291,10 +291,10 @@ a.verdict-stat:hover .verdict-value { text-decoration: underline; text-underline
 .usage-meta.sub { font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- budgets average hint ---------- */
-.budget-avg { display: block; font-size: 11px; line-height: 1.3; }
+.budget-avg { display: block; font-size: 12px; line-height: 1.3; }
 
 /* ---------- taxonomy picker rule notice ---------- */
-.picker-rule-note { margin: 12px 0 0; padding: 8px 12px; background: var(--paper-sunken); border-left: 3px solid var(--rule-strong); border-radius: var(--radius); color: var(--pencil); font-size: 13px; line-height: 1.5; }
+.picker-rule-note { margin: 12px 0 0; padding: 8px 12px; background: var(--paper-sunken); border-left: 3px solid var(--rule-strong); border-radius: var(--radius); color: var(--pencil); font-size: 12px; line-height: 1.5; }
 
 /* ---------- interactive charts ---------- */
 .stmt-body { display: grid; grid-template-columns: minmax(0, 1fr); }
@@ -305,8 +305,8 @@ a.verdict-stat:hover .verdict-value { text-decoration: underline; text-underline
 .donut-slice { transition: opacity .12s ease, transform .12s ease; }
 .donut-slice.dim { opacity: .28; }
 .donut-slice.clickable { cursor: pointer; }
-.donut-center-value { font: 600 22px/1 var(--serif); fill: var(--ink); font-variant-numeric: lining-nums tabular-nums; }
-.donut-center-label { font: 400 11px/1 var(--sans); fill: var(--pencil); }
+.donut-center-value { font: 600 24px/1 var(--serif); fill: var(--ink); font-variant-numeric: lining-nums tabular-nums; }
+.donut-center-label { font: 400 12px/1 var(--sans); fill: var(--pencil); }
 
 .value-trigger.focused { background: var(--paper-sunken); border-radius: var(--radius); }
 .legend-item { display: inline-flex; align-items: center; gap: 8px; padding: 2px 6px; margin: -2px -6px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; border-radius: var(--radius); }
@@ -347,23 +347,24 @@ a.verdict-stat:hover .verdict-value { text-decoration: underline; text-underline
 .compare-row { display: block; text-decoration: none; color: inherit; padding: 8px 10px; margin: -8px -10px; border-radius: var(--radius); transition: opacity .12s ease, background .12s ease; }
 .compare-row:hover, .compare-row.hot { background: var(--paper-sunken); }
 .compare-row.dim { opacity: .4; }
-.compare-row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.compare-row-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.compare-row-head .swatch { align-self: center; }
 .compare-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .compare-bar { display: block; height: 9px; border-radius: 2px; margin: 2px 0; background: var(--paper-sunken); min-width: 2px; }
-.compare-bar.prev { border: 1px solid var(--rule-strong); height: 7px; opacity: .55; background: transparent; }
+.compare-bar.prev { border: 1px solid var(--rule-strong); height: 7px; background: transparent; }
 .compare-values { display: flex; justify-content: space-between; gap: 16px; color: var(--pencil); font-size: 12px; margin-top: 4px; font-variant-numeric: lining-nums tabular-nums; }
-.compare-values b { color: var(--ink); font-family: var(--serif); font-size: 13px; }
+.compare-values b { color: var(--ink); font-family: var(--serif); font-size: 14px; }
 
-.rowlink { color: var(--ink); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
-.rowlink:hover { text-decoration-color: var(--ink); }
+.rowlink { color: var(--ink); font-weight: 500; text-decoration: none; }
+.rowlink:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
 
 /* ---------- ledger drill chips ---------- */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; align-items: center; }
-.chipbox { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--paper-raised); border: 1px solid var(--rule-strong); border-radius: var(--radius); font-size: 12px; color: var(--ink); text-decoration: none; }
-.chipbox-x { border: 0; background: transparent; color: var(--pencil); cursor: pointer; font-size: 13px; line-height: 1; padding: 0; }
-.chipbox-x:hover { color: var(--ink); }
-a.chipbox-clear { color: var(--pencil); border-style: dashed; }
-a.chipbox-clear:hover { color: var(--ink); }
+.chipbox { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--paper-sunken); border-radius: var(--radius); font-size: 12px; color: var(--ink); text-decoration: none; font-variant-numeric: lining-nums tabular-nums; }
+.chipbox-x { border: 0; background: transparent; color: var(--ink); cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+.chipbox-x:hover { text-decoration: underline; }
+a.chipbox-clear { background: transparent; color: var(--pencil); padding: 4px 2px; }
+a.chipbox-clear:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- numbers everywhere ---------- */
 .num, td.num, .amount, .item-meta, .filters-summary { font-variant-numeric: lining-nums tabular-nums; }
@@ -468,6 +469,8 @@ table.ledger td.money { font-family: var(--serif); font-size: 16px; }
 table.ledger .col-check { width: 32px; }
 table.ledger .col-cat { width: 224px; }
 table.ledger .col-len { width: 72px; text-align: right; color: var(--pencil); }
+table.ledger th.col-len { text-align: right; }
+table.ledger td.num { text-align: right; }
 table.ledger tbody tr:hover td { background: var(--paper-sunken); }
 table.ledger tbody tr:hover td.money { background: transparent; }
 table.ledger tfoot td { border-top: 0; padding-top: 4px; }

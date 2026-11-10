@@ -403,7 +403,7 @@ export function OverviewView({ data, reload }: { data: LedgerData; reload: () =>
         })}
           </div>
           {donutSlices.length > 0 ? (
-            <div className="stmt-donut" aria-hidden={false}>
+            <div className="stmt-donut">
               <DonutChart
                 slices={donutSlices}
                 size={196}

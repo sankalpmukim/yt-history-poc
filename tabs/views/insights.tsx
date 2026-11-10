@@ -355,7 +355,7 @@ export function InsightsView({ data, reload }: { data: LedgerData; reload: () =>
                     <td className={"num" + (c.finishRate != null && c.finishRate < 0.66 ? " text-warn" : "")}>
                       {fmtPct(c.finishRate)}
                     </td>
-                    <td className={"num" + (c.abandonRate != null && c.abandonRate >= 0.2 ? " text-danger" : " muted")}>
+                    <td className={"num" + (c.abandonRate != null && c.abandonRate >= 0.2 ? " text-warn" : " muted")}>
                       {fmtPct(c.abandonRate)}
                     </td>
                   </tr>

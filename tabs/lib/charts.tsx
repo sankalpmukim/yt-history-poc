@@ -257,7 +257,7 @@ export function StackedDailyBars({
         {hoverDayAgg ? (
           <div
             className="chart-tip"
-            style={{ left: clamp01((axisW + hoverIndex * step + step / 2) / width) * 100 + "%" }}
+            style={{ left: (0.15 + 0.7 * clamp01((axisW + hoverIndex * step + step / 2) / width)) * 100 + "%" }}
             role="status"
           >
             <b>{fmtDate(hoverDayAgg.date)}</b>
