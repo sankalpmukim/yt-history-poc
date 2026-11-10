@@ -17,7 +17,7 @@
 // Example (Brave):
 //   cp -R "$HOME/Library/Application Support/BraveSoftware/Brave-Browser/Default/Local Extension Settings/<id>" /tmp/ldb
 //   node scripts/dump-extension-store.mjs /tmp/ldb <id> store.json
-import { chromium } from "playwright"
+import { chromium } from "@playwright/test"
 import { mkdirSync, cpSync, rmSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { tmpdir } from "node:os"
