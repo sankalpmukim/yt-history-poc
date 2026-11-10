@@ -1,7 +1,7 @@
 {
   "app": "yt-ledger",
   "backupVersion": 1,
-  "exportedAt": "2026-11-03T05:10:21.517Z",
+  "exportedAt": "2026-11-10T18:15:34.378Z",
   "data": {
     "meta": {
       "version": 2,
@@ -16,10 +16,10 @@
         },
         "debugOverlay": false,
         "devRelay": false,
-        "onboardedAt": "2026-11-03T05:10:21.517Z"
+        "onboardedAt": "2026-11-10T18:15:34.378Z"
       },
-      "installedAt": "2026-11-03T05:10:21.517Z",
-      "lastSyncedAt": "2026-11-03T05:10:21.517Z",
+      "installedAt": "2026-11-10T18:15:34.378Z",
+      "lastSyncedAt": "2026-11-10T18:15:34.378Z",
       "lastSyncStatus": "QA seed fixture",
       "lastSyncDiagnostics": null
     },
@@ -112,8 +112,8 @@
           "channelContains": "NASA"
         },
         "categoryId": "qa-live-channel",
-        "createdAt": "2026-11-03T05:10:21.517Z",
-        "updatedAt": "2026-11-03T05:10:21.517Z",
+        "createdAt": "2026-11-10T18:15:34.378Z",
+        "updatedAt": "2026-11-10T18:15:34.378Z",
         "hitCount": 0
       },
       {
@@ -126,8 +126,8 @@
           "titleRegexFlags": "i"
         },
         "categoryId": "qa-live-title",
-        "createdAt": "2026-11-03T05:10:21.517Z",
-        "updatedAt": "2026-11-03T05:10:21.517Z",
+        "createdAt": "2026-11-10T18:15:34.378Z",
+        "updatedAt": "2026-11-10T18:15:34.378Z",
         "hitCount": 0
       },
       {
@@ -139,8 +139,8 @@
           "channelContains": "Simple Flying"
         },
         "categoryId": "news-world",
-        "createdAt": "2026-11-03T05:10:21.517Z",
-        "updatedAt": "2026-11-03T05:10:21.517Z",
+        "createdAt": "2026-11-10T18:15:34.378Z",
+        "updatedAt": "2026-11-10T18:15:34.378Z",
         "hitCount": 0
       },
       {
@@ -153,8 +153,8 @@
           "titleRegexFlags": "i"
         },
         "categoryId": "practical-coding",
-        "createdAt": "2026-11-03T05:10:21.517Z",
-        "updatedAt": "2026-11-03T05:10:21.517Z",
+        "createdAt": "2026-11-10T18:15:34.378Z",
+        "updatedAt": "2026-11-10T18:15:34.378Z",
         "hitCount": 0
       }
     ],
@@ -170,8 +170,8 @@
         "categoryOverride": null,
         "autoCategoryId": "news-world",
         "appliedRuleId": "qa-simple-flying-news",
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
       "ylqa0000002": {
         "videoId": "ylqa0000002",
@@ -184,8 +184,8 @@
         "categoryOverride": null,
         "autoCategoryId": "news-world",
         "appliedRuleId": "qa-simple-flying-news",
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
       "ylqa0000003": {
         "videoId": "ylqa0000003",
@@ -198,8 +198,8 @@
         "categoryOverride": null,
         "autoCategoryId": "practical-coding",
         "appliedRuleId": "qa-tutorial-coding",
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
       "ylqlive0001": {
         "videoId": "ylqlive0001",
@@ -212,8 +212,8 @@
         "categoryOverride": null,
         "autoCategoryId": "qa-live-channel",
         "appliedRuleId": "qa-live-channel-match",
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
       "ylqlive0002": {
         "videoId": "ylqlive0002",
@@ -226,8 +226,8 @@
         "categoryOverride": null,
         "autoCategoryId": "qa-live-channel",
         "appliedRuleId": "qa-live-channel-match",
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
       "ylqlive0003": {
         "videoId": "ylqlive0003",
@@ -240,8 +240,8 @@
         "categoryOverride": null,
         "autoCategoryId": "qa-live-title",
         "appliedRuleId": "qa-live-title-catchall",
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
       "ylqlive0004": {
         "videoId": "ylqlive0004",
@@ -254,80 +254,80 @@
         "categoryOverride": null,
         "autoCategoryId": "qa-live-title",
         "appliedRuleId": "qa-live-title-catchall",
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       }
     },
     "events": {
-      "ylqa0000001|2026-11-02": {
-        "key": "ylqa0000001|2026-11-02",
+      "ylqa0000001|2026-11-09": {
+        "key": "ylqa0000001|2026-11-09",
         "videoId": "ylqa0000001",
-        "watchedOn": "2026-11-02",
+        "watchedOn": "2026-11-09",
         "progressPct": 100,
         "progressAvgPct": 100,
         "occurrences": 1,
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
-      "ylqa0000002|2026-11-02": {
-        "key": "ylqa0000002|2026-11-02",
+      "ylqa0000002|2026-11-09": {
+        "key": "ylqa0000002|2026-11-09",
         "videoId": "ylqa0000002",
-        "watchedOn": "2026-11-02",
+        "watchedOn": "2026-11-09",
         "progressPct": 100,
         "progressAvgPct": 100,
         "occurrences": 1,
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
-      "ylqa0000003|2026-11-02": {
-        "key": "ylqa0000003|2026-11-02",
+      "ylqa0000003|2026-11-09": {
+        "key": "ylqa0000003|2026-11-09",
         "videoId": "ylqa0000003",
-        "watchedOn": "2026-11-02",
+        "watchedOn": "2026-11-09",
         "progressPct": 100,
         "progressAvgPct": 100,
         "occurrences": 1,
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
-      "ylqlive0001|2026-11-02": {
-        "key": "ylqlive0001|2026-11-02",
+      "ylqlive0001|2026-11-09": {
+        "key": "ylqlive0001|2026-11-09",
         "videoId": "ylqlive0001",
-        "watchedOn": "2026-11-02",
+        "watchedOn": "2026-11-09",
         "progressPct": 100,
         "progressAvgPct": 100,
         "occurrences": 1,
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
-      "ylqlive0002|2026-11-02": {
-        "key": "ylqlive0002|2026-11-02",
+      "ylqlive0002|2026-11-09": {
+        "key": "ylqlive0002|2026-11-09",
         "videoId": "ylqlive0002",
-        "watchedOn": "2026-11-02",
+        "watchedOn": "2026-11-09",
         "progressPct": 100,
         "progressAvgPct": 100,
         "occurrences": 1,
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
-      "ylqlive0003|2026-11-02": {
-        "key": "ylqlive0003|2026-11-02",
+      "ylqlive0003|2026-11-09": {
+        "key": "ylqlive0003|2026-11-09",
         "videoId": "ylqlive0003",
-        "watchedOn": "2026-11-02",
+        "watchedOn": "2026-11-09",
         "progressPct": 100,
         "progressAvgPct": 100,
         "occurrences": 1,
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       },
-      "ylqlive0004|2026-11-02": {
-        "key": "ylqlive0004|2026-11-02",
+      "ylqlive0004|2026-11-09": {
+        "key": "ylqlive0004|2026-11-09",
         "videoId": "ylqlive0004",
-        "watchedOn": "2026-11-02",
+        "watchedOn": "2026-11-09",
         "progressPct": 100,
         "progressAvgPct": 100,
         "occurrences": 1,
-        "firstSeenAt": "2026-11-03T05:10:21.517Z",
-        "lastSeenAt": "2026-11-03T05:10:21.517Z"
+        "firstSeenAt": "2026-11-10T18:15:34.378Z",
+        "lastSeenAt": "2026-11-10T18:15:34.378Z"
       }
     }
   }

@@ -35,13 +35,17 @@ const ROUTES: RouteDef[] = [
 ]
 
 function useHashRoute(): [string, (id: string) => void] {
-  const [hash, setHash] = useState(() => (location.hash || "#/overview").slice(2))
+  const routeOf = (hash: string) => {
+    const raw = (hash || "#/overview").slice(2)
+    return raw.split("?")[0]
+  }
+  const [hash, setHash] = useState(() => location.hash || "#/overview")
   useEffect(() => {
-    const onHash = () => setHash((location.hash || "#/overview").slice(2))
+    const onHash = () => setHash(location.hash)
     window.addEventListener("hashchange", onHash)
     return () => window.removeEventListener("hashchange", onHash)
   }, [])
-  return [hash, (id) => {
+  return [routeOf(hash), (id) => {
     location.hash = "#/" + id
   }]
 }

@@ -13,6 +13,15 @@ import { labelForTarget } from "../../core/taxonomy"
 
 const BLANK_MATCH: RuleMatch = {}
 
+const FILTERS = [
+  { id: "all", label: "All" },
+  { id: "in-use", label: "In use" },
+  { id: "no-hits", label: "No videos yet" },
+  { id: "off", label: "Disabled" }
+] as const
+
+type FilterId = (typeof FILTERS)[number]["id"]
+
 function newRule(now: Date): Rule {
   const iso = now.toISOString()
   return {
@@ -31,11 +40,27 @@ function newRule(now: Date): Rule {
 export function RulesView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const [editing, setEditing] = useState<Rule | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [filter, setFilter] = useState<FilterId>("all")
+  const [query, setQuery] = useState("")
 
   const rules = useMemo(
     () => [...data.rules].sort((a, b) => a.priority - b.priority),
     [data.rules]
   )
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return rules.filter((r) => {
+      if (filter === "in-use" && r.hitCount === 0) return false
+      if (filter === "no-hits" && r.hitCount > 0) return false
+      if (filter === "off" && r.enabled) return false
+      if (q) {
+        const target = labelForTarget(r.categoryId, data.categories, data.subcategories)
+        const hay = `${r.name} ${r.match.channelEquals ?? ""} ${r.match.channelContains ?? ""} ${(r.match.titleContains ?? []).join(" ")} ${r.match.titleRegex ?? ""} ${target}`.toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [rules, filter, query, data.categories, data.subcategories])
   const liveTargets = useMemo(
     () => validTargetIds(data.categories, data.subcategories),
     [data.categories, data.subcategories]
@@ -98,14 +123,47 @@ export function RulesView({ data, reload }: { data: LedgerData; reload: () => Pr
         {rules.length === 0 ? (
           <p className="empty">No rules yet. Create one, or choose a video’s category in the Ledger and tick “Use this for every video from” its channel.</p>
         ) : (
+          <>
+            <div className="rules-filters">
+              <input
+                type="text"
+                className="rules-search"
+                aria-label="Search rules"
+                placeholder="Search rules…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <div className="rangebar" role="group" aria-label="Filter rules">
+                {FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    aria-pressed={filter === f.id}
+                    className={"btn btn-sm" + (filter === f.id ? " active" : "")}
+                    onClick={() => setFilter(f.id)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <span className="filters-summary" role="status">
+                {visible.length === rules.length
+                  ? plural(rules.length, "rule")
+                  : `${visible.length} of ${rules.length} rules`}
+              </span>
+            </div>
+            {visible.length === 0 ? (
+              <p className="empty">No rules match. <button type="button" className="btn btn-sm" onClick={() => { setQuery(""); setFilter("all") }}>Clear filters</button></p>
+            ) : (
           <ol className="list">
-            {rules.map((r, i) => {
+            {visible.map((r) => {
               const dead = r.categoryId && !liveTargets.has(r.categoryId)
               const name = r.name || "Untitled rule"
+              const position = rules.findIndex((x) => x.id === r.id) + 1
               return (
                 <li key={r.id} className={"queueitem" + (r.enabled ? "" : " item-off")} style={{ flexWrap: "wrap" }}>
                   <input type="checkbox" checked={r.enabled} onChange={() => void toggle(r)} aria-label={`Use rule ${name}`} />
-                  <span className="item-index" aria-hidden="true">{i + 1}</span>
+                  <span className="item-index" aria-hidden="true">{position}</span>
                   <div className="item-main">
                     <div className="item-title">{name}{r.enabled ? null : <span className="tag">Off</span>}</div>
                     <div className="item-sub">{describeMatch(r.match)}</div>
@@ -128,8 +186,8 @@ export function RulesView({ data, reload }: { data: LedgerData; reload: () => Pr
                     </span>
                   ) : (
                     <span className="item-actions">
-                      <button type="button" className="btn btn-sm btn-quiet btn-icon" aria-label={`Move ${name} up`} disabled={i === 0} onClick={() => void move(r, -1)}>↑</button>
-                      <button type="button" className="btn btn-sm btn-quiet btn-icon" aria-label={`Move ${name} down`} disabled={i === rules.length - 1} onClick={() => void move(r, 1)}>↓</button>
+                      <button type="button" className="btn btn-sm btn-quiet btn-icon" aria-label={`Move ${name} up`} disabled={position <= 1} onClick={() => void move(r, -1)}>↑</button>
+                      <button type="button" className="btn btn-sm btn-quiet btn-icon" aria-label={`Move ${name} down`} disabled={position >= rules.length} onClick={() => void move(r, 1)}>↓</button>
                       <button type="button" className="btn btn-sm btn-quiet" onClick={() => setEditing(r)}>Edit</button>
                       <button type="button" className="btn btn-sm btn-quiet" onClick={() => setConfirmDelete(r.id)}>Delete</button>
                     </span>
@@ -138,6 +196,8 @@ export function RulesView({ data, reload }: { data: LedgerData; reload: () => Pr
               )
             })}
           </ol>
+            )}
+          </>
         )}
       </section>
 

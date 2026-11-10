@@ -23,6 +23,24 @@ export function channelTimeByScoreBand(params: {
   maxScore: number
   limit?: number
 }): ChannelStat[] {
+  const ids = new Set(
+    params.categories
+      .filter((c) => c.valueScore >= params.minScore && c.valueScore <= params.maxScore)
+      .map((c) => c.id)
+  )
+  return channelTimeByCategoryIds({ ...params, categoryIds: ids })
+}
+
+/** Channels ranked by estimated time in the given top-level categories. */
+export function channelTimeByCategoryIds(params: {
+  videos: Record<string, VideoRecord>
+  events: WatchEvent[]
+  categories: Category[]
+  subcategories?: Subcategory[]
+  from?: string | null
+  categoryIds: Set<string>
+  limit?: number
+}): ChannelStat[] {
   const agg = aggregateRange({
     videos: params.videos,
     events: params.events,
@@ -30,12 +48,10 @@ export function channelTimeByScoreBand(params: {
     subcategories: params.subcategories,
     from: params.from ?? null
   })
-  const scoreOf = new Map(params.categories.map((c) => [c.id, c.valueScore] as const))
   const byChannel = new Map<string, ChannelStat>()
   for (const row of agg.rows) {
     if (row.categoryId == null || row.estimatedSeconds == null) continue
-    const score = scoreOf.get(row.categoryId)
-    if (score == null || score < params.minScore || score > params.maxScore) continue
+    if (!params.categoryIds.has(row.categoryId)) continue
     const ch = row.video.channel || "Unknown channel"
     const cur = byChannel.get(ch) ?? { channel: ch, seconds: 0, watchCount: 0 }
     cur.seconds += row.estimatedSeconds

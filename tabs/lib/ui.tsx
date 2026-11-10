@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import type { BudgetMode, Category, Subcategory } from "../../core/types"
-import { chipLabelForTarget } from "../../core/taxonomy"
+import { chipLabelForTarget, labelForTarget } from "../../core/taxonomy"
 import { runRulesPass } from "../../core/ledger"
 import { ChromeKV } from "../../core/storage"
 import { writeCategories, writeSubcategories } from "./data"
@@ -167,6 +167,16 @@ export interface CategoryChoice {
   alsoChannelRule: boolean
 }
 
+/** Target of the enabled channel-equals rule for this channel, if one exists. */
+export function channelRuleTarget(
+  rules: ReadonlyArray<{ enabled: boolean; match: { channelEquals?: string }; categoryId: string }>,
+  channel: string | null | undefined
+): string | null {
+  if (!channel) return null
+  const needle = channel.trim().toLowerCase()
+  return rules.find((r) => r.enabled && (r.match.channelEquals ?? "").trim().toLowerCase() === needle)?.categoryId ?? null
+}
+
 /**
  * Shared, searchable taxonomy picker. Creation and inline edits are persisted
  * immediately; assignment remains an explicit final action.
@@ -179,6 +189,7 @@ export function TaxonomyPicker({
   current,
   canClear = current != null,
   channel,
+  channelRuleCategoryId,
   onChoose,
   onClose,
   reload
@@ -190,6 +201,8 @@ export function TaxonomyPicker({
   current: string | null
   canClear?: boolean
   channel?: string
+  /** target of an existing enabled channel-equals rule for `channel`, if any */
+  channelRuleCategoryId?: string | null
   onChoose: (choice: CategoryChoice) => void
   onClose: () => void
   reload: () => Promise<void>
@@ -376,10 +389,23 @@ export function TaxonomyPicker({
         ? <p className="muted small" style={{ margin: "8px 0 0" }}>Archived categories are hidden here. Videos already in them keep their category.</p>
         : null}
       {error && !editingId ? <div role="alert" className="taxonomy-error">{error}</div> : null}
+      {channel && channelRuleCategoryId ? (
+        <p className="picker-rule-note" role="note">
+          Videos from <b>{channel}</b> already sort into{" "}
+          <b>{labelForTarget(channelRuleCategoryId, categories, subcategories)}</b> automatically.
+          {current === channelRuleCategoryId
+            ? " This pick would just repeat that rule."
+            : " Picking something else here only changes this video unless you update the rule."}
+        </p>
+      ) : null}
       {channel ? (
         <label className="check" style={{ marginTop: 16 }}>
           <input type="checkbox" checked={alsoRule} onChange={(e) => setAlsoRule(e.target.checked)} />
-          <span>Use this for every video from <b>{channel}</b></span>
+          <span>
+            {channelRuleCategoryId
+             ? <>Update the {channel} rule to use this category too</>
+              : <>Use this for every video from <b>{channel}</b></>}
+          </span>
         </label>
       ) : null}
       <div className="menu-footer">

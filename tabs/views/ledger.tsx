@@ -1,11 +1,14 @@
-/** Ledger: every watch, grouped by day, with inline and bulk categorization. */
+/** Ledger: every watch, grouped by day, with inline and bulk categorization.
+ *  Also the drill-down target for every chart elsewhere: opens pre-filtered
+ *  via hash params (#/ledger?day=…&cat=…&weekday=…&from=…&to=…). */
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { LedgerData } from "../lib/data"
 import { aggregateRange, type LedgerRow } from "../../core/aggregate"
 import { setVideoCategory, bulkAssign, ensureChannelRule } from "../../core/assign"
 import { ChromeKV } from "../../core/storage"
 import type { Category, Subcategory } from "../../core/types"
+import { ledgerHref, useHashQuery, weekdayOf } from "../lib/router"
 import {
   CategoryChip,
   TaxonomyPicker,
@@ -14,19 +17,42 @@ import {
   fmtDur,
   fmtDate,
   plural,
-  rangeFromDate
+  rangeFromDate,
+  channelRuleTarget
 } from "../lib/ui"
 
 const sumSeconds = (rows: LedgerRow[]) => rows.reduce((a, r) => a + (r.estimatedSeconds ?? 0), 0)
 
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+/** Drop one query param from the current hash (chip × buttons). */
+function clearHashParam(key: string) {
+  const base = (location.hash || "#/ledger").split("?")[0]
+  const params = new URLSearchParams(location.hash.split("?")[1] ?? "")
+  params.delete(key)
+  const qs = params.toString()
+  location.hash = qs ? `${base}?${qs}` : base
+}
+
 export function LedgerView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const [range, setRange] = useState<string>("30d")
   const [query, setQuery] = useState("")
-  const [catFilter, setCatFilter] = useState<string>("all")
+  const [catFilterLocal, setCatFilter] = useState<string>("all")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pickerFor, setPickerFor] = useState<string | null>(null)
   const [bulkPicker, setBulkPicker] = useState(false)
   const catById = useMemo(() => new Map(data.categories.map((c) => [c.id, c] as const)), [data.categories])
+
+  // Deep-link filters from the hash (charts and signal cards link here).
+  const hashQuery = useHashQuery()
+  const dayParam = hashQuery.day
+  const weekdayParam = hashQuery.weekday != null && /^\d$/.test(hashQuery.weekday) ? Number(hashQuery.weekday) : null
+  const catParam = hashQuery.cat ?? null
+  const fromParam = hashQuery.from ?? null
+  const toParam = hashQuery.to ?? null
+  useEffect(() => {
+    if (catParam != null && catParam !== catFilterLocal) setCatFilter(catParam)
+  }, [catParam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const allRows = useMemo(
     () =>
@@ -43,13 +69,17 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
     return allRows.filter((r) => {
+      if (dayParam && r.event.watchedOn !== dayParam) return false
+      if (weekdayParam != null && weekdayOf(r.event.watchedOn) !== weekdayParam) return false
+      if (fromParam && r.event.watchedOn < fromParam) return false
+      if (toParam && r.event.watchedOn > toParam) return false
       if (
-        catFilter !== "all" &&
-        (catFilter === "none"
+        catFilterLocal !== "all" &&
+        (catFilterLocal === "none"
           ? r.categoryId != null
-          : catById.has(catFilter)
-            ? r.categoryId !== catFilter
-            : r.targetId !== catFilter)
+          : catById.has(catFilterLocal)
+            ? r.categoryId !== catFilterLocal
+            : r.targetId !== catFilterLocal)
       )
         return false
       if (q) {
@@ -58,7 +88,7 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
       }
       return true
     })
-  }, [allRows, query, catFilter, catById])
+  }, [allRows, query, catFilterLocal, catById, dayParam, weekdayParam, fromParam, toParam])
 
   const byDay = useMemo(() => {
     const m = new Map<string, LedgerRow[]>()
@@ -70,13 +100,31 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
     return [...m.entries()]
   }, [rows])
 
-  const filtered = query.trim() !== "" || catFilter !== "all"
+  const filtered =
+    query.trim() !== "" ||
+    catFilterLocal !== "all" ||
+    dayParam != null ||
+    weekdayParam != null ||
+    fromParam != null ||
+    toParam != null
   const pickerVideo = pickerFor ? data.videos[pickerFor] : null
   const toggle = (id: string) => {
     const next = new Set(selected)
     if (next.has(id)) next.delete(id)
     else next.add(id)
     setSelected(next)
+  }
+
+  // Active deep-link chips (day / weekday / window arrived at from a chart).
+  const chips: Array<{ key: string; label: string }> = []
+  if (dayParam) chips.push({ key: "day", label: `Day: ${fmtDate(dayParam)}` })
+  if (weekdayParam != null) chips.push({ key: "weekday", label: WEEKDAY_NAMES[weekdayParam] ?? "Weekday" })
+  if (fromParam || toParam) chips.push({ key: "window", label: `${fromParam ? fmtDate(fromParam) : "start"} – ${toParam ? fmtDate(toParam) : "today"}` })
+  const chipCat = catParam != null && (catById.has(catParam) || catParam === "none") ? catParam : null
+
+  const clearWindowParams = () => {
+    clearHashParam("from")
+    clearHashParam("to")
   }
 
   return (
@@ -90,6 +138,31 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
         length × how much you watched × replays. A ≈ means we assumed you watched to the end.
       </p>
 
+      {chips.length > 0 ? (
+        <div className="chips" aria-label="Drill-down filters">
+          {chips.map((chip) => (
+            <span className="chipbox" key={chip.key}>
+              {chip.label}
+              <button
+                type="button"
+                className="chipbox-x"
+                aria-label={`Remove filter ${chip.label}`}
+                onClick={() => (chip.key === "window" ? clearWindowParams() : clearHashParam(chip.key))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <a
+            className="chipbox chipbox-clear"
+            href={ledgerHref({})}
+            onClick={() => { setQuery(""); setCatFilter("all") }}
+          >
+            Clear all
+          </a>
+        </div>
+      ) : null}
+
       <div className="card filters">
         <input
           type="text"
@@ -98,7 +171,7 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <select aria-label="Filter by category" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
+        <select aria-label="Filter by category" value={catFilterLocal} onChange={(e) => setCatFilter(e.target.value)}>
           <option value="all">All categories</option>
           <option value="none">Uncategorized</option>
           {data.categories.filter((c) => !c.archivedAt).map((c) => (
@@ -113,6 +186,9 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
         </select>
         <span className="filters-summary" role="status">
           <strong>{fmtDur(sumSeconds(rows))}</strong> in {plural(rows.length, "watch", "watches")}
+          {chipCat && rows.length > 0 ? (
+            <> · <a className="qlink" href={ledgerHref({ cat: chipCat })}>link to this view</a></>
+          ) : null}
         </span>
       </div>
 
@@ -139,7 +215,22 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
         filtered ? (
           <div className="empty">
             <p style={{ margin: "0 0 12px" }}>No watches match these filters.</p>
-            <button type="button" className="btn" onClick={() => { setQuery(""); setCatFilter("all") }}>Clear filters</button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setQuery("")
+                setCatFilter("all")
+                if (dayParam != null || weekdayParam != null || fromParam != null || toParam != null) {
+                  clearHashParam("day")
+                  clearHashParam("weekday")
+                  clearHashParam("from")
+                  clearHashParam("to")
+                }
+              }}
+            >
+              Clear filters
+            </button>
           </div>
         ) : (
           <p className="empty">No watches in this range yet. Open YouTube while signed in, or pick a longer range.</p>
@@ -193,6 +284,7 @@ export function LedgerView({ data, reload }: { data: LedgerData; reload: () => P
           current={pickerVideo.categoryOverride ?? pickerVideo.autoCategoryId}
           canClear={pickerVideo.categoryOverride != null}
           channel={pickerVideo.channel || undefined}
+          channelRuleCategoryId={channelRuleTarget(data.rules, pickerVideo.channel)}
           reload={reload}
           onChoose={async (choice) => {
             const kv = new ChromeKV()
@@ -245,6 +337,8 @@ function LedgerRowView({
   const v = row.video
   const title = v.title || v.videoId
   const repeats = row.event.occurrences > 1 ? `watched ${row.event.occurrences} times` : null
+  const stoppedAt =
+    row.event.progressPct != null && row.event.progressPct < 95 ? `stopped at ${Math.round(row.event.progressPct)}%` : null
   return (
     <tr>
       <td className="col-check">
@@ -255,7 +349,7 @@ function LedgerRowView({
       </td>
       <td className="title-cell">
         <a href={v.url} target="_blank" rel="noreferrer" title={title}>{title}</a>
-        <div className="item-sub">{[v.channel, repeats].filter(Boolean).join(", ")}</div>
+        <div className="item-sub">{[v.channel, repeats, stoppedAt].filter(Boolean).join(", ")}</div>
       </td>
       <td className="col-len">{fmtDur(v.durationSec)}</td>
       <td className="money amount">

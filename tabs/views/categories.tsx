@@ -6,13 +6,49 @@ import { writeCategories, writeSubcategories } from "../lib/data"
 import type { Category, Subcategory } from "../../core/types"
 import { runRulesPass } from "../../core/ledger"
 import { ChromeKV } from "../../core/storage"
+import { aggregateRange } from "../../core/aggregate"
 import { reorderById, scoreAtPosition } from "../../core/taxonomy"
-import { plural } from "../lib/ui"
+import { ledgerHref } from "../lib/router"
+import { fmtDur, fmtPct, plural } from "../lib/ui"
 
 export function CategoriesView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const categories = useMemo(() => [...data.categories].sort((a, b) => a.order - b.order), [data.categories])
   const subs = useMemo(() => [...data.subcategories].sort((a, b) => a.order - b.order), [data.subcategories])
   const rulesUsing = (id: string) => data.rules.filter((rule) => rule.categoryId === id).length
+
+  // Usage behind each row: what reordering is actually trading off.
+  const usage = useMemo(() => {
+    const agg = aggregateRange({
+      videos: data.videos,
+      events: data.events,
+      categories: data.categories,
+      subcategories: data.subcategories,
+      from: null
+    })
+    const total = agg.totalSeconds || 1
+    const byTop = new Map<string, { seconds: number; watches: number }>()
+    const bySub = new Map<string, { seconds: number; watches: number }>()
+    for (const row of agg.rows) {
+      const secs = row.estimatedSeconds ?? 0
+      const top = byTop.get(row.categoryId ?? "none") ?? { seconds: 0, watches: 0 }
+      top.seconds += secs
+      top.watches++
+      byTop.set(row.categoryId ?? "none", top)
+      if (row.subcategoryId != null) {
+        const s = bySub.get(row.subcategoryId) ?? { seconds: 0, watches: 0 }
+        s.seconds += secs
+        s.watches++
+        bySub.set(row.subcategoryId, s)
+      }
+    }
+    return { byTop, bySub, total }
+  }, [data])
+  const usageLabel = (id: string, map: Map<string, { seconds: number; watches: number }>) => {
+    const u = map.get(id) ?? { seconds: 0, watches: 0 }
+    if (u.seconds === 0) return ""
+    const share = u.seconds / usage.total
+    return `${fmtDur(u.seconds)} · ${fmtPct(share)} · ${plural(u.watches, "watch", "watches")}`
+  }
 
   const persist = async (next: Category[]) => {
     await writeCategories(next)
@@ -126,6 +162,15 @@ export function CategoriesView({ data, reload }: { data: LedgerData; reload: () 
                     <span style={{ width: `${Math.max(4, scoreAtPosition(index, categories.length) * 20)}%` }} />
                   </span>
                   <span className="sr-only">{rank}{index === 0 ? ", highest value" : index === categories.length - 1 ? ", lowest value" : ""}</span>
+                  <span className="usage-meta-wrap">
+                    {usageLabel(category.id, usage.byTop) ? (
+                      <a className="usage-meta rowlink" href={ledgerHref({ cat: category.id })} title={`Open ${category.name} watches in the Ledger`}>
+                        {usageLabel(category.id, usage.byTop)}
+                      </a>
+                    ) : (
+                      <span className="usage-meta muted">{category.archivedAt ? "" : "No watches yet"}</span>
+                    )}
+                  </span>
                   {category.archivedAt ? <span className="tag" style={{ marginLeft: 0 }}>Archived</span> : null}
                   {pausedRules(category.id, !!category.archivedAt)}
                   <span className="item-actions row-push">
@@ -159,6 +204,15 @@ export function CategoriesView({ data, reload }: { data: LedgerData; reload: () 
                     <input aria-label={`${sub.name} emoji`} className="emoji-input" type="text" value={sub.emoji} maxLength={4} onChange={(event) => void persistSubs(subs.map((item) => item.id === sub.id ? { ...item, emoji: event.target.value } : item))} />
                     <input aria-label={`${sub.name} name`} type="text" value={sub.name} onChange={(event) => void persistSubs(subs.map((item) => item.id === sub.id ? { ...item, name: event.target.value } : item))} />
                     <input aria-label={`${sub.name} color`} type="color" value={sub.color ?? category.color} onChange={(event) => void persistSubs(subs.map((item) => item.id === sub.id ? { ...item, color: event.target.value } : item))} title={sub.color ?? category.color} />
+                    <span className="usage-meta-wrap sub">
+                      {usageLabel(sub.id, usage.bySub) ? (
+                        <a className="usage-meta rowlink" href={ledgerHref({ cat: sub.id })} title={`Open ${sub.name} watches in the Ledger`}>
+                          {usageLabel(sub.id, usage.bySub)}
+                        </a>
+                      ) : (
+                        <span className="usage-meta muted">{sub.archivedAt || rulesUsing(sub.id) > 0 ? "" : "Unused"}</span>
+                      )}
+                    </span>
                     {sub.archivedAt ? <span className="tag" style={{ marginLeft: 0 }}>Archived</span> : null}
                     {pausedRules(sub.id, !!sub.archivedAt)}
                     <span className="item-actions row-push">

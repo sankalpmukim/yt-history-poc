@@ -92,3 +92,31 @@ export async function ensureChannelRule(
   await runRulesPass(kv, now)
   return next
 }
+
+/**
+ * Clear manual overrides that repeat what a channel rule already does
+ * (same channel, same target). The effective category of every cleared
+ * video is unchanged — the rule takes over after the rules pass.
+ */
+export async function clearDuplicateOverrides(kv: KV, now: Date): Promise<number> {
+  const [videos, rules] = await Promise.all([readVideos(kv), readRules(kv)])
+  const ruleByChannel = new Map<string, string>()
+  for (const rule of rules) {
+    if (!rule.enabled || !rule.match.channelEquals) continue
+    ruleByChannel.set(rule.match.channelEquals.trim().toLowerCase(), rule.categoryId)
+  }
+  let cleared = 0
+  for (const video of Object.values(videos)) {
+    if (video.categoryOverride == null) continue
+    const ruleTarget = ruleByChannel.get((video.channel ?? "").trim().toLowerCase())
+    if (ruleTarget != null && ruleTarget === video.categoryOverride) {
+      video.categoryOverride = null
+      cleared++
+    }
+  }
+  if (cleared > 0) {
+    await kv.set({ [KEYS.videos]: videos })
+    await runRulesPass(kv, now)
+  }
+  return cleared
+}

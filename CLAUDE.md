@@ -98,10 +98,13 @@ This serves the prod build with a mocked `chrome.storage` seeded from `fixtures/
 
 **Time is estimated:** duration × watch progress × occurrences (`core/estimate.ts`). Confidence is `high`, `medium` (assumed watched to the end) or `low` (unknown duration). History is day-granular only.
 
+**Insights come from one engine.** `core/signals.ts` derives every behavioral signal (period-over-period compare, heavy days vs personal norm, value mix by ladder thirds, completion/abandonment, duplicate overrides, channel concentration, rewatches, weekly averages for budget suggestions, setup hygiene). It is pure and unit-tested; views and any future consumers (overlays, exports) should read it rather than recomputing. `computeSignals` returns ranked, human-readable cards; the individual functions return raw numbers for screens that want their own layout. `ladderThirds` defines "high/low value" by ladder *position* over live categories — not the legacy 0–5 `valueScore`, which archived rows at the ladder bottom distort.
+
 **Where code lives.**
-- `core/` is pure, unit-tested logic: merge, rules, aggregate, budget, insights, retention, exports, taxonomy. Keep it free of `chrome.*` except through `KV`.
+- `core/` is pure, unit-tested logic: merge, rules, aggregate, budget, insights, signals, retention, exports, taxonomy. Keep it free of `chrome.*` except through `KV`.
 - `tabs/dashboard.tsx` is a hash-routed shell (`#/overview`, `#/ledger`, …). First run forces `#/onboarding` until `settings.onboardedAt` is set.
 - Views are in `tabs/views/`. Shared UI is in `tabs/lib/ui.tsx`: `Dialog`, `TaxonomyPicker`, `CategoryChip`, `RangeBar`, `BudgetModeControl`, plus the `fmtDur` and `plural` helpers.
+- `scripts/dump-extension-store.mjs` reads a real browser profile's extension storage (via a scratch Chromium profile); `scripts/capture-real-screenshots.mjs` serves the dashboard seeded from such a dump.
 
 ## Dashboard design system ("the statement")
 

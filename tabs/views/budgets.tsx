@@ -5,7 +5,14 @@ import type { LedgerData } from "../lib/data"
 import { patchSettings, settingsOf } from "../lib/data"
 import { refreshBudgetStatusClient } from "../lib/budgetclient"
 import { computeBudgetStatus } from "../../core/budget"
-import { fmtDur, fmtDate, BudgetModeControl, budgetModeDetail } from "../lib/ui"
+import { weeklyAveragesByCategory } from "../../core/signals"
+import { ledgerHref } from "../lib/router"
+import { fmtDur, fmtDate, BudgetModeControl, budgetModeDetail, plural } from "../lib/ui"
+
+/** round seconds up to a friendly weekly hours value (≥ 0.5h, steps of 0.5h) */
+function suggestHours(secondsPerWeek: number): number {
+  return Math.max(0.5, Math.ceil(secondsPerWeek / 3600 / 0.5) * 0.5)
+}
 
 export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
   const settings = settingsOf(data)
@@ -20,6 +27,7 @@ export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => 
   })
   const [draft, setDraft] = useState<Record<string, string>>(initial)
   const [saved, setSaved] = useState(false)
+  const [filled, setFilled] = useState(0)
 
   const status = useMemo(() => {
     if (data.budgetStatus) return data.budgetStatus
@@ -35,6 +43,19 @@ export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => 
   const liveCats = useMemo(
     () => [...data.categories].filter((c) => !c.archivedAt).sort((a, b) => a.order - b.order),
     [data.categories]
+  )
+  const avgByCat = useMemo(
+    () =>
+      new Map(
+        weeklyAveragesByCategory({
+          videos: data.videos,
+          events: data.events,
+          categories: data.categories,
+          subcategories: data.subcategories,
+          rules: data.rules
+        }, 4).map((a) => [a.categoryId, a.secondsPerWeek] as const)
+      ),
+    [data]
   )
   const daysLeft = useMemo(() => {
     if (!status) return null
@@ -56,6 +77,19 @@ export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => 
     await reload()
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+  }
+
+  const fillFromHistory = () => {
+    const next = { ...draft }
+    let count = 0
+    for (const c of liveCats) {
+      const avg = avgByCat.get(c.id) ?? 0
+      if (avg < 1800 || (next[c.id] ?? "").trim() !== "") continue
+      next[c.id] = String(suggestHours(avg))
+      count++
+    }
+    setDraft(next)
+    setFilled(count)
   }
 
   return (
@@ -84,17 +118,27 @@ export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => 
           const over = entry?.over ?? false
           const near = !over && ratio >= 0.8
           const state = over ? "over" : near ? "near" : ""
+          const avg = avgByCat.get(c.id) ?? 0
           return (
             <div key={c.id} className="queueitem budget-row">
               <span className="budget-name">
                 <span className="swatch" style={{ background: c.color }} aria-hidden="true" />
-                <span className="truncate">{c.name}</span>
+                <a
+                  className="truncate rowlink"
+                  href={ledgerHref({ cat: c.id })}
+                  title={`Open ${c.name} watches in the Ledger`}
+                >
+                  {c.name}
+                </a>
+                <span className="budget-avg muted small">
+                  {avg >= 600 ? `${fmtDur(avg)}/wk lately` : ""}
+                </span>
               </span>
               <input
                 type="number"
                 min={0}
                 step={0.25}
-                placeholder="No budget"
+                placeholder={avg >= 1800 ? `≈ ${suggestHours(avg)}h` : "No budget"}
                 aria-label={`${c.name} hours per week`}
                 value={draft[c.id] ?? ""}
                 onChange={(e) => setDraft({ ...draft, [c.id]: e.target.value })}
@@ -114,7 +158,17 @@ export function BudgetsView({ data, reload }: { data: LedgerData; reload: () => 
           )
         })}
         <div className="actions">
-          <span className="status" role="status" aria-live="polite">{saved ? "Budgets saved." : ""}</span>
+          <span className="status" role="status" aria-live="polite">
+            {saved ? "Budgets saved." : filled > 0 ? `Filled ${plural(filled, "empty field")} from your averages — check them, then save.` : ""}
+          </span>
+          <button
+            type="button"
+            className="btn btn-quiet"
+            onClick={fillFromHistory}
+            title="Fill empty budgets with your recent weekly averages, rounded up"
+          >
+            Fill from history
+          </button>
           <button type="button" className="btn btn-primary" onClick={() => void save()}>Save budgets</button>
         </div>
       </section>
