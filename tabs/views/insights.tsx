@@ -33,7 +33,7 @@ const PERIOD_LABEL: Record<string, string> = {
 }
 
 export function InsightsView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
-  const [range, setRange] = useState<string>("90d")
+  const [range, setRange] = useState<string>("7d")
   const [pickerChannel, setPickerChannel] = useState<string | null>(null)
   const [clearedCount, setClearedCount] = useState<number | null>(null)
   const [drill, setDrill] = useState<{ channel: string; label: string; ids: Set<string>; aria: string } | null>(null)

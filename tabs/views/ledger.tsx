@@ -35,7 +35,7 @@ function clearHashParam(key: string) {
 }
 
 export function LedgerView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
-  const [range, setRange] = useState<string>("30d")
+  const [range, setRange] = useState<string>("7d")
   const [query, setQuery] = useState("")
   const [catFilterLocal, setCatFilter] = useState<string>("all")
   const [selected, setSelected] = useState<Set<string>>(new Set())

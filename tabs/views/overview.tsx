@@ -47,7 +47,7 @@ function DeltaChip({ current, previous }: { current: number; previous: number })
 }
 
 export function OverviewView({ data, reload }: { data: LedgerData; reload: () => Promise<void> }) {
-  const [range, setRange] = useState<string>("30d")
+  const [range, setRange] = useState<string>("7d")
   const [pickerFor, setPickerFor] = useState<string | null>(null)
   const [drill, setDrill] = useState<string | null>(null)
 
