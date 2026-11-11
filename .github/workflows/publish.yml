@@ -1,0 +1,137 @@
+# Publish to Chrome Web Store and Firefox Add-ons (AMO) on every version tag.
+#
+# Trigger: push a tag matching `v*` (e.g. `v0.14.0`).
+#
+# Required repository secrets:
+#   CWS_CLIENT_ID        – Google OAuth client id with chromewebstore scope
+#   CWS_CLIENT_SECRET    – matching client secret
+#   CWS_REFRESH_TOKEN    – offline refresh token for the Chrome Web Store API
+#   AMO_API_KEY          – Firefox Add-ons (AMO) JWT issuer key
+#   AMO_API_SECRET       – matching JWT secret
+#
+# The Chrome publisher id and item id, and the AMO slug, are baked into
+# scripts/cws-publish.mjs and scripts/amo-submit.mjs respectively.
+
+name: Publish to stores
+
+on:
+  push:
+    tags: ["v*"]
+
+# Only one publish at a time; cancel older runs for the same ref.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write          # needed for gh release create
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Node + pnpm ──────────────────────────────────────────────────
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Sanity checks ────────────────────────────────────────────────
+      - name: Verify version consistency
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag version ($TAG) does not match package.json ($PKG)"
+            exit 1
+          fi
+
+      - name: Run unit tests
+        run: pnpm test
+
+      # ── Build ─────────────────────────────────────────────────────────
+      - name: Build both targets
+        run: pnpm build:all
+
+      - name: Package zips
+        run: |
+          pnpm package
+          pnpm package:firefox
+
+      - name: Lint Firefox build
+        run: npx web-ext lint -s build/firefox-mv3-prod --warnings-as-errors=false
+
+      # ── Prepare release artifacts ─────────────────────────────────────
+      - name: Prepare release zips
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          cp build/chrome-mv3-prod.zip "yt-ledger-${TAG}.zip"
+          cp build/firefox-mv3-prod.zip "yt-ledger-${TAG}-firefox.zip"
+
+      - name: Create source archive for AMO
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          git archive --format=zip "${TAG}" -o "store-assets/yt-ledger-${TAG}-source.zip"
+
+      # ── GitHub Release ────────────────────────────────────────────────
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "${TAG}" \
+            "yt-ledger-${TAG}.zip" \
+            "yt-ledger-${TAG}-firefox.zip" \
+            --title "YT Ledger ${TAG}" \
+            --generate-notes \
+            --notes-start-tag "$(git tag --sort=-v:refname | sed -n '2p')" || true
+          # Append install instructions
+          gh release edit "${TAG}" --notes "$(gh release view "${TAG}" --json body -q .body)
+
+          ---
+          **Install**
+          - Chrome: unzip and Load unpacked in chrome://extensions.
+          - Firefox: about:debugging → Load Temporary Add-on → pick the -firefox.zip."
+
+      # ── Chrome Web Store ──────────────────────────────────────────────
+      - name: Publish to Chrome Web Store
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: node scripts/cws-publish.mjs release build/chrome-mv3-prod.zip
+
+      # ── Firefox Add-ons (AMO) ─────────────────────────────────────────
+      - name: Publish to Firefox Add-ons
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # amo-submit.mjs reads credentials from AMO_KEYS_JSON file
+          KEYS_FILE="$(mktemp)"
+          printf '{"firefox":{"apiKey":"%s","apiSecret":"%s"}}' \
+            "$AMO_API_KEY" "$AMO_API_SECRET" > "$KEYS_FILE"
+          export AMO_KEYS_JSON="$KEYS_FILE"
+
+          node scripts/amo-submit.mjs \
+            build/firefox-mv3-prod.zip \
+            "store-assets/yt-ledger-${TAG}-source.zip"
+
+          rm -f "$KEYS_FILE"
